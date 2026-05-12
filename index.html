@@ -184,7 +184,7 @@ function iniciarPedidosAutoRefresh(){
   detenerPedidosAutoRefresh();
   pedidosPollingHandle = setInterval(async () => {
     if(session.tab === 'pedidos' || session.tab === 'dashboard'){
-      await cargarPedidosSupabase(false);
+      await cargarPedidosSupabase(true);
     }
   }, 3000);
 }
