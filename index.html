@@ -1078,16 +1078,45 @@ function vistaCompras(){
   const calc = state.purchaseCalc || {productId:'',monthlyDemand:'',leadDays:'',safetyDays:'',reviewDays:'',result:null};
   const selected = inv.find(x => String(x.id) === String(calc.productId));
 
+  const underMin = inv.filter(x => Number(x.min || 0) > 0 && Number(x.stock || 0) <= Number(x.min || 0));
+  const withoutConfig = inv.filter(x => Number(x.min || 0) === 0 && Number(x.max || 0) === 0);
+  const suggested = inv
+    .map(x => {
+      const stock = Number(x.stock || 0);
+      const min = Number(x.min || 0);
+      const max = Number(x.max || 0);
+      const reorderQty = max > stock ? Math.max(0, max - stock) : 0;
+      return {
+        ...x,
+        reorderQty,
+        buyNow: min > 0 && stock <= min
+      };
+    })
+    .filter(x => x.buyNow || x.reorderQty > 0)
+    .sort((a,b) => {
+      if(a.buyNow !== b.buyNow) return a.buyNow ? -1 : 1;
+      return Number(b.reorderQty || 0) - Number(a.reorderQty || 0);
+    });
+
+  const totalSuggestedUnits = suggested.reduce((acc, item) => acc + Number(item.reorderQty || 0), 0);
+
   return `
     <div class="section-title">
       <h2>Compras</h2>
-      <p>Calcula mínimos y máximos de forma sencilla para apoyar la reposición.</p>
+      <p>Define máximos y mínimos, detecta faltantes y genera compras sugeridas para almacén.</p>
+    </div>
+
+    <div class="metrics">
+      ${cardMetric({label:'Bajo mínimo',value:String(underMin.length),sub:'Productos que ya piden compra',status:underMin.length>0?'warn':'good'})}
+      ${cardMetric({label:'Unidades sugeridas',value:String(totalSuggestedUnits),sub:'Compra estimada para reponer',status:totalSuggestedUnits>0?'warn':'good'})}
+      ${cardMetric({label:'Sin configuración',value:String(withoutConfig.length),sub:'Productos sin mínimo y máximo',status:withoutConfig.length>0?'warn':'good'})}
+      ${cardMetric({label:'Productos revisados',value:String(inv.length),sub:'Base para compras',status:'good'})}
     </div>
 
     <div class="grid-2">
       <div class="card">
         <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Calculadora de mínimos y máximos</h3>
+          <h3>Calculadora de máximos y mínimos</h3>
           <p class="sub">Llenas los datos y el sistema te propone el mínimo y el máximo.</p>
           <form id="purchaseCalcForm" class="form">
             <div class="field">
@@ -1135,9 +1164,25 @@ function vistaCompras(){
           ` : `
             <div class="note-box">Llena los datos de la izquierda y presiona <b>Calcular</b> para ver el resultado.</div>
           `}
+
+          <div class="table-title">Prioridad de compra</div>
+          <div class="note-box">
+            <b>Comprar ya:</b> productos con stock igual o menor al mínimo.<br>
+            <b>Compra sugerida:</b> cantidad para acercarse al máximo configurado.
+          </div>
         </div>
       </div>
     </div>
+
+    <div class="table-title">Compras sugeridas</div>
+    ${tabla([
+      {key:'product',label:'Producto'},
+      {key:'stock',label:'Stock actual'},
+      {key:'min',label:'Mínimo'},
+      {key:'max',label:'Máximo'},
+      {key:'reorderQty',label:'Compra sugerida'},
+      {key:'buyNow',label:'Prioridad',render:v=>v?'<span class="badge" style="background:#fff7ed;color:#c2410c">Comprar ya</span>':'<span class="badge" style="background:#ecfdf5;color:#166534">Programar</span>'}
+    ], suggested)}
 
     <div class="table-title">Resumen actual de inventario para compras</div>
     ${tabla([
