@@ -101,7 +101,6 @@ th{border-top:none;font-size:12px;color:#475569;text-transform:uppercase}
 <script>
 const SUPABASE_URL = 'https://miztzgfcglvqvvjjtcyv.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Nei-DTUW7PhVnrKHYHCM8g_9aWq7rvb';
-
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 const STORAGE_KEY = 'seyalab_simple_inventario_v2';
@@ -116,6 +115,7 @@ const roles = {
 function hoy(){ return new Date().toISOString().slice(0,10); }
 function copiar(v){ return JSON.parse(JSON.stringify(v)); }
 function dinero(n){ return '$' + Number(n||0).toLocaleString(); }
+function esCerrada(status){ return String(status || '').toLowerCase() === 'cerrada' || String(status || '').toLowerCase() === 'ganada'; }
 function pct(a,b){ if(!b) return 0; return Math.round((a/b)*100); }
 function diasVencido(fecha){
   const a = new Date(fecha), b = new Date(hoy());
@@ -1605,3 +1605,6 @@ render();
 </script>
 </body>
 </html>
+
+
+ 
