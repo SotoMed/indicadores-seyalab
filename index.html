@@ -114,7 +114,7 @@ const roles = {
 
 function hoy(){ return new Date().toISOString().slice(0,10); }
 function copiar(v){ return JSON.parse(JSON.stringify(v)); }
-function dinero(n){ return '$' + Number(n||0).toLocaleString(); }
+function dinero(n){ return '$' + Number(n||0).toLocaleString('en-US'); }
 function esCerrada(status){ return String(status || '').toLowerCase() === 'cerrada' || String(status || '').toLowerCase() === 'ganada'; }
 function pct(a,b){ if(!b) return 0; return Math.round((a/b)*100); }
 function diasVencido(fecha){
@@ -635,19 +635,24 @@ function metricas(){
   const inv = inventarioConStock();
   const cerradas = state.sales.filter(x => esCerrada(x.status));
   const ventasMonto = cerradas.reduce((a,b)=>a+Number(b.amount||0),0);
-  const conversion = pct(cerradas.length, state.sales.length || 1);
-  const entradasDia = pct(state.warehouseEntries.filter(x=>x.sameDay).length, state.warehouseEntries.length || 1);
+  const totalVentas = state.sales.length || 0;
+  const conversion = pct(cerradas.length, totalVentas || 1);
+
+  const entradasMismoDiaCount = state.warehouseEntries.filter(x=>x.sameDay).length;
+  const totalEntradas = state.warehouseEntries.length || 0;
+  const entradasDia = pct(entradasMismoDiaCount, totalEntradas || 1);
+
   const abiertas = state.collections.filter(x=>!x.paid);
   const vencidas = abiertas.filter(x=>diasVencido(x.dueDate)>0);
   const vencidaPct = pct(vencidas.length, abiertas.length || 1);
 
   return {
-    salesAmount:{label:'Ventas del mes',value:dinero(ventasMonto),sub:'Monto cerrado',status:'good'},
-    conversion:{label:'Conversión',value:conversion+'%',sub:'Cerradas vs registradas',status:estado(conversion,35,20)},
-    entriesSameDay:{label:'Entradas al día',value:entradasDia+'%',sub:'Registro el mismo día',status:estado(entradasDia,95,80)},
-    overduePct:{label:'Cobranza vencida',value:vencidaPct+'%',sub:'Facturas abiertas vencidas',status:vencidaPct<=10?'good':vencidaPct<=25?'warn':'bad'},
-    itemsCount:{label:'Productos cargados',value:String(inv.length),sub:'Inventario maestro',status:'good'},
-    criticalItems:{label:'Productos críticos',value:String(inv.filter(x=>x.critical).length),sub:'Stock en mínimo o menos',status:inv.filter(x=>x.critical).length>0?'warn':'good'}
+    salesAmount:{label:'Ventas del mes',value:dinero(ventasMonto),sub:`${cerradas.length} cerradas de ${totalVentas} registradas`,status:'good'},
+    conversion:{label:'Conversión',value:conversion+'%',sub:`${cerradas.length} cerradas / ${totalVentas} registradas`,status:estado(conversion,35,20)},
+    entriesSameDay:{label:'Entradas al día',value:entradasDia+'%',sub:`${entradasMismoDiaCount} de ${totalEntradas} registradas el mismo día`,status:estado(entradasDia,95,80)},
+    overduePct:{label:'Cobranza vencida',value:vencidaPct+'%',sub:`${vencidas.length} vencidas de ${abiertas.length} abiertas`,status:vencidaPct<=10?'good':vencidaPct<=25?'warn':'bad'},
+    itemsCount:{label:'Productos cargados',value:String(inv.length),sub:`${inv.length} productos en inventario maestro`,status:'good'},
+    criticalItems:{label:'Productos críticos',value:String(inv.filter(x=>x.critical).length),sub:`${inv.filter(x=>x.critical).length} con stock en mínimo o menos`,status:inv.filter(x=>x.critical).length>0?'warn':'good'}
   };
 }
 
@@ -764,7 +769,8 @@ function vistaDashboard(){
   const seller2 = salesBase.filter(x => (x.seller || '') === 'Vendedor 2');
 
   const sellerClosedAmount = (list) => list.filter(x => esCerrada(x.status)).reduce((a,b)=>a+Number(b.amount||0),0);
-  const sellerConversion = (list) => pct(list.filter(x => esCerrada(x.status)).length, list.length || 1);
+  const sellerClosedCount = (list) => list.filter(x => esCerrada(x.status)).length;
+  const sellerConversion = (list) => pct(sellerClosedCount(list), list.length || 1);
 
   return `
     <div class="section-title">
@@ -781,8 +787,8 @@ function vistaDashboard(){
           <h3>Vendedor 1</h3>
           <p class="sub">Seguimiento separado por vendedor</p>
           <div class="metrics" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
-            ${cardMetric({label:'Ventas cerradas',value:dinero(sellerClosedAmount(seller1)),sub:'Monto cerrado',status:'good'})}
-            ${cardMetric({label:'Conversión',value:sellerConversion(seller1)+'%',sub:'Cerradas vs registradas',status:estado(sellerConversion(seller1),35,20)})}
+            ${cardMetric({label:'Ventas cerradas',value:dinero(sellerClosedAmount(seller1)),sub:`${sellerClosedCount(seller1)} cerradas`,status:'good'})}
+            ${cardMetric({label:'Conversión',value:sellerConversion(seller1)+'%',sub:`${sellerClosedCount(seller1)} cerradas / ${seller1.length} registradas`,status:estado(sellerConversion(seller1),35,20)})}
           </div>
         </div>
       </div>
@@ -791,8 +797,8 @@ function vistaDashboard(){
           <h3>Vendedor 2</h3>
           <p class="sub">Seguimiento separado por vendedor</p>
           <div class="metrics" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
-            ${cardMetric({label:'Ventas cerradas',value:dinero(sellerClosedAmount(seller2)),sub:'Monto cerrado',status:'good'})}
-            ${cardMetric({label:'Conversión',value:sellerConversion(seller2)+'%',sub:'Cerradas vs registradas',status:estado(sellerConversion(seller2),35,20)})}
+            ${cardMetric({label:'Ventas cerradas',value:dinero(sellerClosedAmount(seller2)),sub:`${sellerClosedCount(seller2)} cerradas`,status:'good'})}
+            ${cardMetric({label:'Conversión',value:sellerConversion(seller2)+'%',sub:`${sellerClosedCount(seller2)} cerradas / ${seller2.length} registradas`,status:estado(sellerConversion(seller2),35,20)})}
           </div>
         </div>
       </div>
