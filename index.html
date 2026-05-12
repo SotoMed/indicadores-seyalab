@@ -178,29 +178,42 @@ const ADMIN_PASSWORD = '9wkmry1d';
 let state = cargar();
 let session = { role:'director', tab:'dashboard' };
 
-let pedidosPollingHandle = null;
+let syncPollingHandle = null;
 
-function iniciarPedidosAutoRefresh(){
-  detenerPedidosAutoRefresh();
-  pedidosPollingHandle = setInterval(async () => {
-    if(session.tab === 'pedidos' || session.tab === 'dashboard'){
+function tabNecesitaPedidos(tab){
+  return tab === 'pedidos' || tab === 'dashboard';
+}
+
+function tabNecesitaAlmacen(tab){
+  return tab === 'inventario' || tab === 'almacen' || tab === 'compras' || tab === 'pedidos' || tab === 'dashboard';
+}
+
+function iniciarAutoSync(){
+  detenerAutoSync();
+  syncPollingHandle = setInterval(async () => {
+    if(tabNecesitaPedidos(session.tab)){
       await cargarPedidosSupabase(true);
+    }
+    if(tabNecesitaAlmacen(session.tab)){
+      await cargarAlmacenSupabase(true);
     }
   }, 3000);
 }
 
-function detenerPedidosAutoRefresh(){
-  if(pedidosPollingHandle){
-    clearInterval(pedidosPollingHandle);
-    pedidosPollingHandle = null;
+function detenerAutoSync(){
+  if(syncPollingHandle){
+    clearInterval(syncPollingHandle);
+    syncPollingHandle = null;
   }
 }
 
 cargarPedidosSupabase();
-iniciarPedidosAutoRefresh();
+cargarAlmacenSupabase();
+iniciarAutoSync();
 
 window.addEventListener('focus', async () => {
   await cargarPedidosSupabase();
+  await cargarAlmacenSupabase();
 });
 
 function cargar(){
@@ -379,6 +392,149 @@ async function actualizarPedidoSupabase(orderId, changes){
 }
 
 
+
+async function cargarAlmacenSupabase(shouldRender = true){
+  try{
+    const invRes = await supabaseClient
+      .from('inventory')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if(invRes.error){
+      console.error('Error cargando inventario desde Supabase:', invRes.error);
+      return;
+    }
+
+    state.inventory = (invRes.data || []).map(row => ({
+      id: row.id,
+      code: row.code || '',
+      product: row.product || '',
+      category: row.category || '',
+      location: row.location || '',
+      initialQty: Number(row.initial_qty || 0),
+      min: Number(row.min_qty || 0),
+      max: Number(row.max_qty || 0),
+      provider: row.provider || ''
+    }));
+
+    const [entriesRes, outputsRes] = await Promise.all([
+      supabaseClient.from('warehouse_entries').select('*').order('id', { ascending: false }),
+      supabaseClient.from('warehouse_outputs').select('*').order('id', { ascending: false })
+    ]);
+
+    if(entriesRes.error){
+      console.error('Error cargando entradas desde Supabase:', entriesRes.error);
+    } else {
+      state.warehouseEntries = (entriesRes.data || []).map(row => {
+        const productRow = state.inventory.find(x => Number(x.id) === Number(row.product_id));
+        return {
+          id: row.id,
+          date: row.movement_date,
+          supplier: row.supplier || '',
+          productId: row.product_id ? String(row.product_id) : '',
+          product: productRow ? productRow.product : '',
+          qty: Number(row.qty || 0),
+          sameDay: !!row.same_day
+        };
+      });
+    }
+
+    if(outputsRes.error){
+      console.error('Error cargando salidas desde Supabase:', outputsRes.error);
+    } else {
+      state.warehouseOutputs = (outputsRes.data || []).map(row => {
+        const productRow = state.inventory.find(x => Number(x.id) === Number(row.product_id));
+        return {
+          id: row.id,
+          date: row.movement_date,
+          area: row.area || '',
+          reference: row.reference || '',
+          productId: row.product_id ? String(row.product_id) : '',
+          product: productRow ? productRow.product : '',
+          qty: Number(row.qty || 0),
+          doubleCheck: !!row.double_check
+        };
+      });
+    }
+
+    if(shouldRender && tabNecesitaAlmacen(session.tab)){
+      renderMain();
+    }
+  }catch(err){
+    console.error('Error general cargando almacén:', err);
+  }
+}
+
+async function insertarProductoSupabase(item){
+  const payload = {
+    code: item.code || null,
+    product: item.product || '',
+    category: item.category || null,
+    location: item.location || null,
+    initial_qty: Number(item.initialQty || 0),
+    min_qty: Number(item.min || 0),
+    max_qty: Number(item.max || 0),
+    provider: item.provider || null,
+    active: true
+  };
+  const { data, error } = await supabaseClient
+    .from('inventory')
+    .insert(payload)
+    .select()
+    .single();
+  if(error) throw error;
+  return data;
+}
+
+async function actualizarProductoSupabase(id, changes){
+  const payload = {};
+  if(Object.prototype.hasOwnProperty.call(changes, 'code')) payload.code = changes.code || null;
+  if(Object.prototype.hasOwnProperty.call(changes, 'product')) payload.product = changes.product || '';
+  if(Object.prototype.hasOwnProperty.call(changes, 'category')) payload.category = changes.category || null;
+  if(Object.prototype.hasOwnProperty.call(changes, 'location')) payload.location = changes.location || null;
+  if(Object.prototype.hasOwnProperty.call(changes, 'initialQty')) payload.initial_qty = Number(changes.initialQty || 0);
+  if(Object.prototype.hasOwnProperty.call(changes, 'min')) payload.min_qty = Number(changes.min || 0);
+  if(Object.prototype.hasOwnProperty.call(changes, 'max')) payload.max_qty = Number(changes.max || 0);
+  if(Object.prototype.hasOwnProperty.call(changes, 'provider')) payload.provider = changes.provider || null;
+
+  const { error } = await supabaseClient
+    .from('inventory')
+    .update(payload)
+    .eq('id', id);
+  if(error) throw error;
+}
+
+async function borrarRegistroSupabase(tabla, id){
+  const { error } = await supabaseClient.from(tabla).delete().eq('id', id);
+  if(error) throw error;
+}
+
+async function registrarEntradaSupabase(entry){
+  const { error } = await supabaseClient.from('warehouse_entries').insert({
+    movement_date: entry.date,
+    supplier: entry.supplier || null,
+    product_id: entry.productId ? Number(entry.productId) : null,
+    qty: Number(entry.qty || 0),
+    same_day: !!entry.sameDay,
+    created_by: session.role
+  });
+  if(error) throw error;
+}
+
+async function registrarSalidaSupabase(output){
+  const { error } = await supabaseClient.from('warehouse_outputs').insert({
+    movement_date: output.date,
+    area: output.area || null,
+    reference: output.reference || null,
+    product_id: output.productId ? Number(output.productId) : null,
+    qty: Number(output.qty || 0),
+    double_check: !!output.doubleCheck,
+    created_by: session.role
+  });
+  if(error) throw error;
+}
+
+
 function metricas(){
   const inv = inventarioConStock();
   const ganadas = state.sales.filter(x => x.status === 'Ganada');
@@ -441,8 +597,11 @@ function renderTabs(){
   tabs.querySelectorAll('[data-tab]').forEach(btn=>{
     btn.onclick = async () => {
       session.tab = btn.dataset.tab;
-      if(session.tab === 'pedidos' || session.tab === 'dashboard'){
+      if(tabNecesitaPedidos(session.tab)){
         await cargarPedidosSupabase(false);
+      }
+      if(tabNecesitaAlmacen(session.tab)){
+        await cargarAlmacenSupabase(false);
       }
       renderMain();
       renderTabs();
@@ -1227,26 +1386,32 @@ function attachEvents(){
   };
 
   const inventoryForm = main.querySelector('#inventoryForm');
-  if(inventoryForm) inventoryForm.onsubmit = (e)=>{
+  if(inventoryForm) inventoryForm.onsubmit = async (e)=>{
     e.preventDefault();
     if(session.role !== 'administrador'){
       alert('Solo el administrador puede dar de alta productos en inventario.');
       return;
     }
-    const fd = new FormData(inventoryForm);
-    state.inventory.unshift({
-      id:Date.now(),
-      code:fd.get('code'),
-      product:fd.get('product'),
-      category:fd.get('category'),
-      location:fd.get('location'),
-      initialQty:Number(fd.get('initialQty')||0),
-      min:Number(fd.get('min')||0),
-      max:Number(fd.get('max')||0),
-      provider:fd.get('provider')
-    });
-    state.importInfo = {rowsRead:1, imported:1, skipped:0, message:'Producto agregado manualmente.'};
-    guardar(); renderMain();
+    try{
+      const fd = new FormData(inventoryForm);
+      await insertarProductoSupabase({
+        code: fd.get('code'),
+        product: fd.get('product'),
+        category: fd.get('category'),
+        location: fd.get('location'),
+        initialQty: Number(fd.get('initialQty')||0),
+        min: Number(fd.get('min')||0),
+        max: Number(fd.get('max')||0),
+        provider: fd.get('provider')
+      });
+      state.importInfo = {rowsRead:1, imported:1, skipped:0, message:'Producto agregado en base compartida.'};
+      await cargarAlmacenSupabase(false);
+      guardar(); renderMain();
+      alert('Producto guardado en Supabase.');
+    }catch(err){
+      console.error(err);
+      alert('No se pudo guardar el producto en Supabase.');
+    }
   };
 
   const downloadTemplateBtn = main.querySelector('#downloadTemplateBtn');
@@ -1271,7 +1436,7 @@ function attachEvents(){
       return;
     }
     const reader = new FileReader();
-    reader.onload = function(evt){
+    reader.onload = async function(evt){
       try{
         const wb = file.name.toLowerCase().endsWith('.csv')
           ? XLSX.read(evt.target.result, {type:'binary'})
@@ -1357,16 +1522,32 @@ function attachEvents(){
           };
         }).filter(Boolean);
 
-        state.inventory = replace ? nuevos : [...nuevos, ...state.inventory];
-        state.importInfo = {
-          rowsRead: dataRows.length,
-          imported,
-          skipped,
-          message: 'Encabezados detectados en la fila ' + (headerRowIndex + 1) + '. Baja a la tabla para ver el inventario cargado.'
-        };
-        guardar();
-        renderMain();
-        alert('Importación terminada. Importados: ' + imported + ' | Omitidos: ' + skipped);
+        try{
+          if(replace){
+            // Borra inventario maestro actual antes de reimportar.
+            for(const item of [...state.inventory]){
+              await borrarRegistroSupabase('inventory', item.id);
+            }
+          }
+
+          for(const item of nuevos){
+            await insertarProductoSupabase(item);
+          }
+
+          await cargarAlmacenSupabase(false);
+          state.importInfo = {
+            rowsRead: dataRows.length,
+            imported,
+            skipped,
+            message: 'Encabezados detectados en la fila ' + (headerRowIndex + 1) + '. Inventario enviado a la base compartida.'
+          };
+          guardar();
+          renderMain();
+          alert('Importación terminada. Importados: ' + imported + ' | Omitidos: ' + skipped);
+        }catch(syncErr){
+          console.error(syncErr);
+          alert('Se leyó el archivo, pero no se pudo guardar el inventario en Supabase.');
+        }
       }catch(err){
         state.importInfo = {
           rowsRead:0,
@@ -1411,19 +1592,25 @@ function attachEvents(){
   };
 
   const applyMinMaxBtn = main.querySelector('#applyMinMaxBtn');
-  if(applyMinMaxBtn) applyMinMaxBtn.onclick = ()=>{
+  if(applyMinMaxBtn) applyMinMaxBtn.onclick = async ()=>{
     const calc = state.purchaseCalc || {};
     if(!calc.productId || !calc.result){
       alert('Primero calcula los valores.');
       return;
     }
-    state.inventory = state.inventory.map(item => String(item.id) === String(calc.productId)
-      ? { ...item, min: Number(calc.result.minSuggested || 0), max: Number(calc.result.maxSuggested || 0) }
-      : item
-    );
-    guardar();
-    renderMain();
-    alert('Mínimo y máximo aplicados al producto.');
+    try{
+      await actualizarProductoSupabase(calc.productId, {
+        min: Number(calc.result.minSuggested || 0),
+        max: Number(calc.result.maxSuggested || 0)
+      });
+      await cargarAlmacenSupabase(false);
+      guardar();
+      renderMain();
+      alert('Mínimo y máximo aplicados al producto.');
+    }catch(err){
+      console.error(err);
+      alert('No se pudo actualizar el producto en Supabase.');
+    }
   };
 
 
@@ -1554,25 +1741,25 @@ function attachEvents(){
         alert('No hay suficiente inventario para empacar completo este pedido.');
         return;
       }
-      order.items.forEach(it => {
-        state.warehouseOutputs.unshift({
-          id: Date.now() + Math.floor(Math.random()*10000),
-          date: hoy(),
-          area: 'Pedido ' + order.folio,
-          productId: it.productId,
-          product: it.product,
-          qty: Number(it.qty || 0),
-          doubleCheck: true
-        });
-      });
       try{
+        for(const it of order.items){
+          await registrarSalidaSupabase({
+            date: hoy(),
+            area: 'Pedido ' + order.folio,
+            reference: order.folio,
+            productId: it.productId,
+            qty: Number(it.qty || 0),
+            doubleCheck: true
+          });
+        }
         await actualizarPedidoSupabase(id, { status:'Empacado' });
+        await cargarAlmacenSupabase(false);
         await cargarPedidosSupabase();
         guardar();
         renderMain();
       }catch(err){
         console.error(err);
-        alert('No se pudo marcar como empacado en Supabase.');
+        alert('No se pudo empacar el pedido en Supabase.');
       }
     };
   });
@@ -1609,7 +1796,7 @@ function attachEvents(){
 
 
   const entryForm = main.querySelector('#entryForm');
-  if(entryForm) entryForm.onsubmit = (e)=>{
+  if(entryForm) entryForm.onsubmit = async (e)=>{
     e.preventDefault();
     const fd = new FormData(entryForm);
 
@@ -1619,81 +1806,109 @@ function attachEvents(){
     const category = String(fd.get('category') || '').trim();
     const location = String(fd.get('location') || '').trim();
 
-    // 1) Si seleccionaron producto del inventario, usar ese
-    if(productId){
-      const invItem = (state.inventory || []).find(x => String(x.id) === productId);
-      if(invItem){
-        productName = invItem.product;
+    try{
+      if(productId){
+        const invItem = (state.inventory || []).find(x => String(x.id) === productId);
+        if(invItem){
+          productName = invItem.product;
+        }
       }
-    }
 
-    // 2) Si no seleccionaron producto, intentar encontrarlo por nombre
-    if(!productId && productName){
-      const existing = (state.inventory || []).find(x =>
-        String(x.product || '').trim().toLowerCase() === productName.toLowerCase()
-      );
-      if(existing){
-        productId = String(existing.id);
-        productName = existing.product;
+      if(!productId && productName){
+        const existing = (state.inventory || []).find(x =>
+          String(x.product || '').trim().toLowerCase() === productName.toLowerCase()
+        );
+        if(existing){
+          productId = String(existing.id);
+          productName = existing.product;
+        }
       }
+
+      if(!productId && productName){
+        const codeBase = productName
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g,' ')
+          .trim()
+          .split(' ')
+          .slice(0,2)
+          .join('-') || 'PROD';
+
+        const saved = await insertarProductoSupabase({
+          code:'AUTO-' + codeBase,
+          product:productName,
+          category: category || 'Sin categoría',
+          location: location || 'Sin ubicación',
+          initialQty:0,
+          min:0,
+          max:0,
+          provider:supplier || ''
+        });
+        productId = String(saved.id);
+      }
+
+      await registrarEntradaSupabase({
+        date: fd.get('date'),
+        supplier: supplier,
+        productId: productId || '',
+        qty: Number(fd.get('qty')||0),
+        sameDay: !!fd.get('sameDay')
+      });
+
+      await cargarAlmacenSupabase(false);
+      guardar();
+      renderMain();
+      alert('Entrada registrada en Supabase.');
+    }catch(err){
+      console.error(err);
+      alert('No se pudo registrar la entrada en Supabase.');
     }
-
-    // 3) Si no existe en inventario, darlo de alta automático
-    if(!productId && productName){
-      const newInvId = Date.now() + Math.floor(Math.random()*10000);
-      const codeBase = productName
-        .toUpperCase()
-        .replace(/[^A-Z0-9]+/g,' ')
-        .trim()
-        .split(' ')
-        .slice(0,2)
-        .join('-') || 'PROD';
-      const newItem = {
-        id:newInvId,
-        code:'AUTO-' + codeBase,
-        product:productName,
-        category: category || 'Sin categoría',
-        location: location || 'Sin ubicación',
-        initialQty:0,
-        min:0,
-        max:0,
-        provider:supplier || ''
-      };
-      state.inventory.unshift(newItem);
-      productId = String(newInvId);
-    }
-
-    state.warehouseEntries.unshift({
-      id:Date.now(),
-      date:fd.get('date'),
-      supplier:supplier,
-      productId: productId || '',
-      product: productName,
-      qty:Number(fd.get('qty')||0),
-      sameDay:!!fd.get('sameDay')
-    });
-
-    guardar();
-    renderMain();
   };
 
   const outputForm = main.querySelector('#outputForm');
-  if(outputForm) outputForm.onsubmit = (e)=>{
+  if(outputForm) outputForm.onsubmit = async (e)=>{
     e.preventDefault();
     const fd = new FormData(outputForm);
-    const productId = fd.get('productId');
-    const invItem = (state.inventory || []).find(x => String(x.id) === String(productId));
-    const productName = invItem ? invItem.product : fd.get('product');
-    state.warehouseOutputs.unshift({
-      id:Date.now(),
-      date:fd.get('date'),
-      area:fd.get('area'),
-      productId: productId || '',
-      product: productName,
-      qty:Number(fd.get('qty')||0),
-      doubleCheck:!!fd.get('doubleCheck')
-    });
-    guardar(); renderMain();
+    let productId = String(fd.get('productId') || '').trim();
+    let productName = String(fd.get('product') || '').trim();
+
+    try{
+      if(productId){
+        const invItem = (state.inventory || []).find(x => String(x.id) === String(productId));
+        if(invItem){
+          productName = invItem.product;
+        }
+      }
+
+      if(!productId && productName){
+        const existing = (state.inventory || []).find(x =>
+          String(x.product || '').trim().toLowerCase() === productName.toLowerCase()
+        );
+        if(existing){
+          productId = String(existing.id);
+        }
+      }
+
+      if(!productId){
+        alert('Selecciona un producto del inventario o escribe uno que ya exista.');
+        return;
+      }
+
+      await registrarSalidaSupabase({
+        date: fd.get('date'),
+        area: fd.get('area'),
+        productId: productId || '',
+        qty: Number(fd.get('qty')||0),
+        doubleCheck: !!fd.get('doubleCheck')
+      });
+
+      await cargarAlmacenSupabase(false);
+      guardar();
+      renderMain();
+      alert('Salida registrada en Supabase.');
+    }catch(err){
+      console.error(err);
+      alert('No se pudo registrar la salida en Supabase.');
+    }
   };
 
   const countForm = main.querySelector('#countForm');
@@ -1746,27 +1961,43 @@ function attachEvents(){
   };
 
   main.querySelectorAll('[data-del]').forEach(btn=>{
-    btn.onclick = ()=>{
+    btn.onclick = async ()=>{
       const id = Number(btn.dataset.id);
       const type = btn.dataset.del;
-      if(type==='inventory'){
-        if(session.role !== 'administrador'){
-          alert('Solo el administrador puede borrar productos del inventario.');
-          return;
+      try{
+        if(type==='inventory'){
+          if(session.role !== 'administrador'){
+            alert('Solo el administrador puede borrar productos del inventario.');
+            return;
+          }
+          await borrarRegistroSupabase('inventory', id);
+          await cargarAlmacenSupabase(false);
+        } else if(type==='entry'){
+          await borrarRegistroSupabase('warehouse_entries', id);
+          await cargarAlmacenSupabase(false);
+        } else if(type==='output'){
+          await borrarRegistroSupabase('warehouse_outputs', id);
+          await cargarAlmacenSupabase(false);
+        } else if(type==='count'){
+          state.counts = state.counts.filter(x=>x.id!==id);
+        } else if(type==='sale'){
+          state.sales = state.sales.filter(x=>x.id!==id);
+        } else if(type==='collection'){
+          state.collections = state.collections.filter(x=>x.id!==id);
         }
-        state.inventory = state.inventory.filter(x=>x.id!==id);
+        guardar();
+        renderMain();
+      }catch(err){
+        console.error(err);
+        alert('No se pudo borrar el registro en Supabase.');
       }
-      if(type==='entry') state.warehouseEntries = state.warehouseEntries.filter(x=>x.id!==id);
-      if(type==='output') state.warehouseOutputs = state.warehouseOutputs.filter(x=>x.id!==id);
-      if(type==='count') state.counts = state.counts.filter(x=>x.id!==id);
-      if(type==='sale') state.sales = state.sales.filter(x=>x.id!==id);
-      if(type==='collection') state.collections = state.collections.filter(x=>x.id!==id);
-      guardar(); renderMain();
     };
   });
 }
 
-render();
+Promise.all([cargarPedidosSupabase(false), cargarAlmacenSupabase(false)]).finally(() => {
+  render();
+});
 </script>
 </body>
 </html>
