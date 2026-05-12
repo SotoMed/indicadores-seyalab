@@ -192,6 +192,10 @@ function tabNecesitaVentas(tab){
   return tab === 'ventas' || tab === 'dashboard';
 }
 
+function tabNecesitaCobranza(tab){
+  return tab === 'cobranza' || tab === 'dashboard';
+}
+
 function tabCargaAlmacen(tab){
   return tab === 'inventario' || tab === 'almacen' || tab === 'compras' || tab === 'pedidos' || tab === 'dashboard';
 }
@@ -216,6 +220,9 @@ function iniciarAutoSync(){
     if(tabNecesitaVentas(session.tab)){
       await cargarVentasSupabase(shouldRender);
     }
+    if(tabNecesitaCobranza(session.tab)){
+      await cargarCobranzaSupabase(shouldRender);
+    }
   }, 3000);
 }
 
@@ -229,6 +236,7 @@ function detenerAutoSync(){
 cargarPedidosSupabase();
 cargarAlmacenSupabase();
 cargarVentasSupabase();
+cargarCobranzaSupabase();
 iniciarAutoSync();
 
 window.addEventListener('focus', async () => {
@@ -236,6 +244,7 @@ window.addEventListener('focus', async () => {
   await cargarPedidosSupabase(shouldRender);
   await cargarAlmacenSupabase(shouldRender);
   await cargarVentasSupabase(shouldRender);
+  await cargarCobranzaSupabase(shouldRender);
 });
 
 function cargar(){
@@ -631,6 +640,60 @@ async function guardarVentaSupabase(item){
 }
 
 
+
+async function cargarCobranzaSupabase(shouldRender = true){
+  try{
+    const { data, error } = await supabaseClient
+      .from('collections')
+      .select('*')
+      .order('id', { ascending: false });
+
+    if(error){
+      console.error('Error cargando cobranza desde Supabase:', error);
+      return;
+    }
+
+    state.collections = (data || []).map(row => ({
+      id: row.id,
+      invoice: row.invoice || '',
+      client: row.client || '',
+      amount: Number(row.amount || 0),
+      dueDate: row.due_date || '',
+      status: row.status || 'Pendiente',
+      paid: !!row.paid,
+      contactedBeforeDue: !!row.contacted_before_due
+    }));
+
+    if(shouldRender && tabNecesitaCobranza(session.tab)){
+      renderMain();
+    }
+  }catch(err){
+    console.error('Error general cargando cobranza:', err);
+  }
+}
+
+async function guardarCobranzaSupabase(item){
+  const payload = {
+    invoice: item.invoice || null,
+    client: item.client || '',
+    amount: Number(item.amount || 0),
+    due_date: item.dueDate || null,
+    status: item.status || 'Pendiente',
+    paid: !!item.paid,
+    contacted_before_due: !!item.contactedBeforeDue
+  };
+
+  const { data, error } = await supabaseClient
+    .from('collections')
+    .insert(payload)
+    .select()
+    .single();
+
+  if(error) throw error;
+  return data;
+}
+
+
 function metricas(){
   const inv = inventarioConStock();
   const cerradas = state.sales.filter(x => esCerrada(x.status));
@@ -706,6 +769,9 @@ function renderTabs(){
       }
       if(tabNecesitaVentas(session.tab)){
         await cargarVentasSupabase(false);
+      }
+      if(tabNecesitaCobranza(session.tab)){
+        await cargarCobranzaSupabase(false);
       }
       renderMain();
       renderTabs();
@@ -1453,10 +1519,32 @@ function vistaVentas(){
 }
 
 function vistaCobranza(){
+  const abiertas = (state.collections || []).filter(x => !x.paid);
+  const vencidas = abiertas.filter(x => diasVencido(x.dueDate) > 0);
+  const porVencer = abiertas.filter(x => {
+    const d = diasVencido(x.dueDate);
+    return d <= 0 && d >= -7;
+  });
+
   return `
     <div class="section-title">
       <h2>Cobranza</h2>
-      <p>Registro rápido de facturas y seguimiento.</p>
+      <p>Registro compartido de facturas. También impacta los indicadores del dashboard del director.</p>
+    </div>
+
+    <div class="note-box">
+      Mientras escribes en cobranza, la pantalla ya no debe recargarse sola para no borrar lo que estás capturando.
+    </div>
+
+    <div class="actions-row">
+      <button class="ghost-btn" id="refreshCollectionsBtn" type="button">Actualizar cobranza desde Supabase</button>
+    </div>
+
+    <div class="metrics">
+      ${cardMetric({label:'Abiertas',value:String(abiertas.length),sub:`${abiertas.length} facturas abiertas`,status:abiertas.length>0?'warn':'good'})}
+      ${cardMetric({label:'Vencidas',value:String(vencidas.length),sub:`${vencidas.length} facturas vencidas`,status:vencidas.length>0?'bad':'good'})}
+      ${cardMetric({label:'Por vencer',value:String(porVencer.length),sub:`${porVencer.length} vencen en 7 días`,status:porVencer.length>0?'warn':'good'})}
+      ${cardMetric({label:'Monto abierto',value:dinero(abiertas.reduce((a,b)=>a+Number(b.amount||0),0)),sub:`${abiertas.length} facturas pendientes`,status:'good'})}
     </div>
 
     <div class="grid-2">
@@ -1483,6 +1571,7 @@ function vistaCobranza(){
           {key:'amount',label:'Monto',render:v=>dinero(v)},
           {key:'dueDate',label:'Vence'},
           {key:'status',label:'Estatus'},
+          {key:'paid',label:'Pagada',render:v=>v?'Sí':'No'},
           {key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="collection" data-id="${row.id}">Borrar</button>`}
         ], state.collections)}
       </div>
@@ -2181,20 +2270,30 @@ function attachEvents(){
   };
 
   const colForm = main.querySelector('#colForm');
-  if(colForm) colForm.onsubmit = (e)=>{
+  if(colForm) colForm.onsubmit = async (e)=>{
     e.preventDefault();
-    const fd = new FormData(colForm);
-    state.collections.unshift({
-      id:Date.now(),
-      invoice:fd.get('invoice'),
-      client:fd.get('client'),
-      amount:Number(fd.get('amount')||0),
-      dueDate:fd.get('dueDate'),
-      status:fd.get('status'),
-      paid:!!fd.get('paid'),
-      contactedBeforeDue:!!fd.get('contactedBeforeDue')
-    });
-    guardar(); renderMain();
+    detenerAutoSync();
+    try{
+      const fd = new FormData(colForm);
+      await guardarCobranzaSupabase({
+        invoice: fd.get('invoice'),
+        client: fd.get('client'),
+        amount: Number(fd.get('amount')||0),
+        dueDate: fd.get('dueDate'),
+        status: fd.get('status'),
+        paid: !!fd.get('paid'),
+        contactedBeforeDue: !!fd.get('contactedBeforeDue')
+      });
+      await cargarCobranzaSupabase(false);
+      guardar();
+      renderMain();
+      alert('Factura guardada en Supabase.');
+    }catch(err){
+      console.error(err);
+      alert('No se pudo guardar la factura en Supabase.');
+    }finally{
+      iniciarAutoSync();
+    }
   };
 
   main.querySelectorAll('[data-del]').forEach(btn=>{
@@ -2221,7 +2320,8 @@ function attachEvents(){
           await borrarRegistroSupabase('sales', id);
           await cargarVentasSupabase(false);
         } else if(type==='collection'){
-          state.collections = state.collections.filter(x=>x.id!==id);
+          await borrarRegistroSupabase('collections', id);
+          await cargarCobranzaSupabase(false);
         }
         guardar();
         renderMain();
@@ -2233,7 +2333,7 @@ function attachEvents(){
   });
 }
 
-Promise.all([cargarPedidosSupabase(false), cargarAlmacenSupabase(false), cargarVentasSupabase(false)]).finally(() => {
+Promise.all([cargarPedidosSupabase(false), cargarAlmacenSupabase(false), cargarVentasSupabase(false), cargarCobranzaSupabase(false)]).finally(() => {
   render();
 });
 </script>
