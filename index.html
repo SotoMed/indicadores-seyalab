@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Seyalab | Panel simple con importación robusta</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --bg:#f4f7fb; --card:#fff; --line:#dbe3ec; --text:#16202b; --muted:#64748b;
@@ -99,23 +98,18 @@ th{border-top:none;font-size:12px;color:#475569;text-transform:uppercase}
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-const SUPABASE_URL = 'https://miztzgfcglvqvvjjtcyv.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Nei-DTUW7PhVnrKHYHCM8g_9aWq7rvb';
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
-
 const STORAGE_KEY = 'seyalab_simple_inventario_v2';
 
 const roles = {
   director: { label:'Director', desc:'Solo ve el resumen.', tabs:['dashboard'] },
-  administrador: { label:'Administrador', desc:'Administra inventario, configuraciones y movimientos.', tabs:['dashboard','pedidos','configurar','inventario','compras','almacen','ventas','cobranza'] },
-  almacen: { label:'Almacén', desc:'Revisa pedidos y registra movimientos de almacén.', tabs:['pedidos','almacen'] },
+  administrador: { label:'Administrador', desc:'Captura, borra y configura el panel.', tabs:['dashboard','configurar','inventario','almacen','ventas','cobranza'] },
+  almacen: { label:'Almacén', desc:'Llena inventario y movimientos de almacén.', tabs:['inventario','almacen'] },
   ventas: { label:'Ventas', desc:'Registra seguimiento comercial y cobranza.', tabs:['ventas','cobranza'] }
 };
 
 function hoy(){ return new Date().toISOString().slice(0,10); }
 function copiar(v){ return JSON.parse(JSON.stringify(v)); }
 function dinero(n){ return '$' + Number(n||0).toLocaleString(); }
-function esCerrada(status){ return String(status || '').toLowerCase() === 'cerrada' || String(status || '').toLowerCase() === 'ganada'; }
 function pct(a,b){ if(!b) return 0; return Math.round((a/b)*100); }
 function diasVencido(fecha){
   const a = new Date(fecha), b = new Date(hoy());
@@ -156,47 +150,20 @@ const seed = {
   collections: [
     {id:1,invoice:'FAC-001',client:'Laboratorio Vida',amount:85000,dueDate:hoy(),status:'Pendiente',paid:false,contactedBeforeDue:true}
   ],
-  orders: [],
-  orderDraft: { date:hoy(), client:'', notes:'', items:[] },
   dashboard: {
     visible:['salesAmount','conversion','entriesSameDay','overduePct','itemsCount','criticalItems'],
     notes:[]
   },
-  purchaseCalc: {
-    productId:'',
-    monthlyDemand:'',
-    leadDays:'',
-    safetyDays:'',
-    reviewDays:'',
-    result:null
-  },
-  inventorySearch: '',
   importInfo: null
 };
 
-const ADMIN_PASSWORD = '9wkmry1d';
 let state = cargar();
-let session = { role:'director', tab:'dashboard' };
+let session = { role:'administrador', tab:'inventario' };
 
 function cargar(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    if(!raw) return copiar(seed);
-    const parsed = JSON.parse(raw);
-    return {
-      ...copiar(seed),
-      ...parsed,
-      dashboard: { ...copiar(seed).dashboard, ...(parsed.dashboard || {}) },
-      purchaseCalc: { ...copiar(seed).purchaseCalc, ...(parsed.purchaseCalc || {}) },
-      orderDraft: { ...copiar(seed).orderDraft, ...(parsed.orderDraft || {}) },
-      inventory: Array.isArray(parsed.inventory) ? parsed.inventory : copiar(seed).inventory,
-      warehouseEntries: Array.isArray(parsed.warehouseEntries) ? parsed.warehouseEntries : copiar(seed).warehouseEntries,
-      warehouseOutputs: Array.isArray(parsed.warehouseOutputs) ? parsed.warehouseOutputs : copiar(seed).warehouseOutputs,
-      counts: Array.isArray(parsed.counts) ? parsed.counts : copiar(seed).counts,
-      sales: Array.isArray(parsed.sales) ? parsed.sales : copiar(seed).sales,
-      collections: Array.isArray(parsed.collections) ? parsed.collections : copiar(seed).collections,
-      orders: Array.isArray(parsed.orders) ? parsed.orders : [],
-    };
+    return raw ? JSON.parse(raw) : copiar(seed);
   }catch(e){
     return copiar(seed);
   }
@@ -209,46 +176,12 @@ function inventarioConStock(){
   const entradas = state.warehouseEntries || [];
   const salidas = state.warehouseOutputs || [];
   return (state.inventory || []).map(item => {
-    const itemName = String(item.product || '').trim().toLowerCase();
-    const itemId = String(item.id);
-
-    const extra = entradas
-      .filter(x => {
-        const sameId = x.productId && String(x.productId) === itemId;
-        const sameName = String(x.product || '').trim().toLowerCase() === itemName;
-        return sameId || sameName;
-      })
-      .reduce((a,b)=>a+Number(b.qty||0),0);
-
-    const resta = salidas
-      .filter(x => {
-        const sameId = x.productId && String(x.productId) === itemId;
-        const sameName = String(x.product || '').trim().toLowerCase() === itemName;
-        return sameId || sameName;
-      })
-      .reduce((a,b)=>a+Number(b.qty||0),0);
-
+    const extra = entradas.filter(x => (x.product||'').trim().toLowerCase() === (item.product||'').trim().toLowerCase()).reduce((a,b)=>a+Number(b.qty||0),0);
+    const resta = salidas.filter(x => (x.product||'').trim().toLowerCase() === (item.product||'').trim().toLowerCase()).reduce((a,b)=>a+Number(b.qty||0),0);
     const stock = Number(item.initialQty||0) + extra - resta;
     const critical = stock <= Number(item.min||0);
     return {...item, stock, critical};
   });
-}
-
-
-function stockDisponible(productId){
-  const inv = inventarioConStock();
-  const item = inv.find(x => String(x.id) === String(productId));
-  return item ? Number(item.stock || 0) : 0;
-}
-
-function nombreProducto(productId){
-  const item = (state.inventory || []).find(x => String(x.id) === String(productId));
-  return item ? item.product : '';
-}
-
-function siguienteFolioPedido(){
-  const list = state.orders || [];
-  return 'PED-' + String(list.length + 1).padStart(3,'0');
 }
 
 function metricas(){
@@ -284,18 +217,7 @@ function renderRoles(){
   ).join('');
   row.querySelectorAll('[data-role]').forEach(btn=>{
     btn.onclick = () => {
-      const nextRole = btn.dataset.role;
-      if(nextRole === 'administrador' && session.role !== 'administrador'){
-        const pass = window.prompt('Contraseña de administrador:');
-        if(pass === null){
-          return;
-        }
-        if(String(pass).trim() !== ADMIN_PASSWORD){
-          alert('Contraseña incorrecta.');
-          return;
-        }
-      }
-      session.role = nextRole;
+      session.role = btn.dataset.role;
       session.tab = roles[session.role].tabs[0];
       render();
     };
@@ -339,25 +261,9 @@ function tabla(cols,rows){
 
 function renderMain(){
   const main = document.getElementById('main');
-
-  const adminOnlyTabs = ['configurar','inventario','compras'];
-  if(adminOnlyTabs.includes(session.tab) && session.role !== 'administrador'){
-    main.innerHTML = `
-      <div class="section-title">
-        <h2>Acceso restringido</h2>
-        <p>Esta sección solo está disponible para el administrador.</p>
-      </div>
-      <div class="note-box">
-        Para entrar a esta sección necesitas cambiar al perfil <b>Administrador</b> y escribir la contraseña correcta.
-      </div>`;
-    return;
-  }
-
   if(session.tab === 'dashboard') main.innerHTML = vistaDashboard();
-  if(session.tab === 'pedidos') main.innerHTML = vistaPedidos();
   if(session.tab === 'configurar') main.innerHTML = vistaConfigurar();
   if(session.tab === 'inventario') main.innerHTML = vistaInventario();
-  if(session.tab === 'compras') main.innerHTML = vistaCompras();
   if(session.tab === 'almacen') main.innerHTML = vistaAlmacen();
   if(session.tab === 'ventas') main.innerHTML = vistaVentas();
   if(session.tab === 'cobranza') main.innerHTML = vistaCobranza();
@@ -370,13 +276,6 @@ function vistaDashboard(){
   const notes = state.dashboard.notes || [];
   const inv = inventarioConStock();
 
-  const salesBase = state.sales || [];
-  const seller1 = salesBase.filter(x => (x.seller || '') === 'Vendedor 1');
-  const seller2 = salesBase.filter(x => (x.seller || '') === 'Vendedor 2');
-
-  const sellerClosedAmount = (list) => list.filter(x => esCerrada(x.status)).reduce((a,b)=>a+Number(b.amount||0),0);
-  const sellerConversion = (list) => pct(list.filter(x => esCerrada(x.status)).length, list.length || 1);
-
   return `
     <div class="section-title">
       <h2>Dashboard</h2>
@@ -384,29 +283,6 @@ function vistaDashboard(){
     </div>
     <div class="metrics">
       ${visibles.map(cardMetric).join('')}
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Vendedor 1</h3>
-          <p class="sub">Seguimiento separado por vendedor</p>
-          <div class="metrics" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
-            ${cardMetric({label:'Ventas cerradas',value:dinero(sellerClosedAmount(seller1)),sub:'Monto cerrado',status:'good'})}
-            ${cardMetric({label:'Conversión',value:sellerConversion(seller1)+'%',sub:'Cerradas vs registradas',status:estado(sellerConversion(seller1),35,20)})}
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Vendedor 2</h3>
-          <p class="sub">Seguimiento separado por vendedor</p>
-          <div class="metrics" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
-            ${cardMetric({label:'Ventas cerradas',value:dinero(sellerClosedAmount(seller2)),sub:'Monto cerrado',status:'good'})}
-            ${cardMetric({label:'Conversión',value:sellerConversion(seller2)+'%',sub:'Cerradas vs registradas',status:estado(sellerConversion(seller2),35,20)})}
-          </div>
-        </div>
-      </div>
     </div>
 
     ${notes.length ? `
@@ -445,131 +321,6 @@ function vistaDashboard(){
       </div>
     </div>`;
 }
-
-
-function vistaPedidos(){
-  const inv = inventarioConStock();
-  const draft = state.orderDraft || { date:hoy(), client:'', notes:'', items:[] };
-  const orders = state.orders || [];
-  const pendientes = orders.filter(x => x.status === 'Pendiente almacén').length;
-  const listos = orders.filter(x => x.status === 'Listo para surtir').length;
-  const empacados = orders.filter(x => x.status === 'Empacado').length;
-  const facturados = orders.filter(x => x.status === 'Facturado').length;
-
-  return `
-    <div class="section-title">
-      <h2>Pedidos</h2>
-      <p>Aquí administración captura el pedido y almacén confirma si hay o no hay. Cuando almacén empaca, el stock baja automáticamente.</p>
-    </div>
-
-    <div class="metrics">
-      ${cardMetric({label:'Pendientes almacén',value:String(pendientes),sub:'Esperando revisión',status:pendientes>0?'warn':'good'})}
-      ${cardMetric({label:'Listos para surtir',value:String(listos),sub:'Hay existencia suficiente',status:listos>0?'good':'good'})}
-      ${cardMetric({label:'Empacados',value:String(empacados),sub:'Listos para facturar',status:empacados>0?'good':'good'})}
-      ${cardMetric({label:'Facturados',value:String(facturados),sub:'Cerrados por administración',status:'good'})}
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Nuevo pedido</h3>
-          <p class="sub">Administración captura el pedido y lo manda al almacén. Puedes usar <b>Agregar partida</b> para varias líneas o guardar directo si solo será una.</p>
-          ${session.role === 'administrador' ? `
-          <form id="orderDraftForm" class="form">
-            <div class="field"><label>Fecha</label><input type="date" name="date" value="${draft.date || hoy()}"></div>
-            <div class="field"><label>Cliente</label><input name="client" value="${draft.client || ''}"></div>
-            <div class="field"><label>Observaciones</label><textarea name="notes" placeholder="Notas del pedido">${draft.notes || ''}</textarea></div>
-            <div class="field">
-              <label>Producto</label>
-              <select name="productId" id="draftProductId">
-                <option value="">Selecciona un producto</option>
-                ${inv.map(x => `<option value="${x.id}">${x.product} · stock ${x.stock}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field"><label>Cantidad solicitada</label><input type="number" name="qty" id="draftQty"></div>
-            <div class="actions-row">
-              <button class="ghost-btn" type="button" id="addOrderItemBtn">Agregar partida</button>
-              <button class="save-btn" type="submit">Guardar pedido</button>
-            </div>
-          </form>` : `
-          <div class="note-box">Solo administración crea pedidos. Almacén entra aquí para revisar disponibilidad y empacar.</div>`}
-
-          <div class="table-title">Partidas del pedido actual</div>
-          ${draft.items.length ? `
-            <div class="kpi-list">
-              ${draft.items.map((it,idx)=>`
-                <div class="kpi-row" style="grid-template-columns:1fr auto auto">
-                  <div>
-                    <div style="font-weight:800">${it.product}</div>
-                    <div style="margin-top:4px;color:#64748b;font-size:13px">Solicitado: ${it.qty} · Disponible: ${stockDisponible(it.productId)}</div>
-                  </div>
-                  <span class="badge">${stockDisponible(it.productId) >= Number(it.qty) ? 'OK' : 'Faltante'}</span>
-                  ${session.role === 'administrador' ? `<button class="danger-btn" data-del-draft-item="${idx}">Quitar</button>` : ''}
-                </div>
-              `).join('')}
-            </div>` : `<div class="note-box">Todavía no hay partidas en el pedido.</div>`}
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Flujo</h3>
-          <p class="sub">Así queda conectado administración con almacén</p>
-          <div class="note-box">
-            <b>1.</b> Administración captura el pedido.<br><br>
-            <b>2.</b> Almacén revisa si hay existencia.<br><br>
-            <b>3.</b> Si hay completo, cambia a <b>Listo para surtir</b>.<br><br>
-            <b>4.</b> Al empacar, el sistema genera salidas de almacén y baja stock.<br><br>
-            <b>5.</b> Administración marca el pedido como <b>Facturado</b>.
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="note-box">
-      <b>Pedidos guardados actualmente:</b> ${orders.length}
-    </div>
-    <div class="table-title">Pedidos registrados</div>
-    <div class="kpi-list">
-      ${orders.length ? orders.map(order => `
-        <div class="card" style="padding:16px">
-          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
-            <div>
-              <div style="font-size:18px;font-weight:800">${order.folio} · ${order.client}</div>
-              <div style="margin-top:6px;color:#64748b;font-size:13px">Fecha: ${order.date} · Estatus: <b>${order.status}</b></div>
-              <div style="margin-top:6px;color:#64748b;font-size:13px">${order.notes || 'Sin observaciones'}</div>
-            </div>
-            <div class="actions-row">
-              ${session.role === 'almacen' && (order.status === 'Pendiente almacén' || order.status === 'Incompleto') ? `<button class="ghost-btn" data-review-order="${order.id}">Revisar disponibilidad</button>` : ''}
-              ${session.role === 'almacen' && order.status === 'Listo para surtir' ? `<button class="save-btn" data-pack-order="${order.id}">Empacar / surtir</button>` : ''}
-              ${session.role === 'administrador' && order.status === 'Empacado' ? `<button class="save-btn" data-invoice-order="${order.id}">Marcar facturado</button>` : ''}
-              ${session.role === 'administrador' && (order.status === 'Pendiente almacén' || order.status === 'Incompleto') ? `<button class="danger-btn" data-cancel-order="${order.id}">Cancelar</button>` : ''}
-            </div>
-          </div>
-
-          <div class="table-wrap" style="margin-top:14px">
-            <table>
-              <thead>
-                <tr><th>Producto</th><th>Solicitado</th><th>Disponible</th><th>Resultado</th></tr>
-              </thead>
-              <tbody>
-                ${order.items.map(it => `
-                  <tr>
-                    <td>${it.product}</td>
-                    <td>${it.qty}</td>
-                    <td>${stockDisponible(it.productId)}</td>
-                    <td>${stockDisponible(it.productId) >= Number(it.qty) ? '<span class="badge" style="background:#ecfdf5;color:#166534">Hay</span>' : '<span class="badge" style="background:#fff7ed;color:#c2410c">No hay completo</span>'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `).join('') : `<div class="note-box">Todavía no hay pedidos registrados.</div>`}
-    </div>
-  `;
-}
-
 
 function vistaConfigurar(){
   const m = metricas();
@@ -629,22 +380,27 @@ function vistaConfigurar(){
 function vistaInventario(){
   const inv = inventarioConStock();
   const info = state.importInfo;
-  const q = String(state.inventorySearch || '').trim().toLowerCase();
-  const filteredInv = q ? inv.filter(x =>
-    String(x.code || '').toLowerCase().includes(q) ||
-    String(x.product || '').toLowerCase().includes(q) ||
-    String(x.category || '').toLowerCase().includes(q) ||
-    String(x.location || '').toLowerCase().includes(q) ||
-    String(x.provider || '').toLowerCase().includes(q)
-  ) : inv;
-  const canManageInventory = session.role === 'administrador';
+  return `
+    <div class="section-title">
+      <h2>Inventario</h2>
+      <p>Aquí puedes cargar el inventario de dos formas: manual o desde Excel.</p>
+    </div>
 
-  const deleteColumn = canManageInventory
-    ? [{key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="inventory" data-id="${row.id}">Borrar</button>`}]
-    : [];
+    <div class="metrics">
+      ${cardMetric({label:'Productos',value:String(inv.length),sub:'Inventario maestro',status:'good'})}
+      ${cardMetric({label:'Stock total',value:String(inv.reduce((a,b)=>a+Number(b.stock||0),0)),sub:'Existencia total',status:'good'})}
+      ${cardMetric({label:'Críticos',value:String(inv.filter(x=>x.critical).length),sub:'En mínimo o menos',status:inv.filter(x=>x.critical).length>0?'warn':'good'})}
+      ${cardMetric({label:'Ubicaciones',value:String(new Set(inv.map(x=>x.location||'')).size),sub:'Ubicaciones registradas',status:'good'})}
+    </div>
 
-  const manualSection = canManageInventory
-    ? `
+    ${info ? `
+      <div class="note-box ${info.imported > 0 ? 'status-ok' : 'status-warn'}">
+        <b>Última importación</b><br>
+        Filas leídas: ${info.rowsRead} · Importadas: ${info.imported} · Omitidas: ${info.skipped}<br>
+        ${info.message || ''}
+      </div>` : ''}
+
+    <div class="grid-2">
       <div class="card">
         <div class="card" style="padding:18px;border:none;box-shadow:none">
           <h3>Carga manual</h3>
@@ -662,6 +418,7 @@ function vistaInventario(){
           </form>
         </div>
       </div>
+
       <div class="card">
         <div class="card" style="padding:18px;border:none;box-shadow:none">
           <h3>Carga desde Excel</h3>
@@ -683,62 +440,7 @@ function vistaInventario(){
             <button class="save-btn" type="submit">Importar archivo</button>
           </form>
         </div>
-      </div>`
-    : `
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Inventario protegido</h3>
-          <p class="sub">Solo el administrador puede editar el inventario maestro</p>
-          <div class="note-box">
-            Este perfil no puede dar de alta, importar ni borrar productos del inventario.
-            El stock solamente cambia por <b>entradas</b> y <b>salidas</b> registradas en el sistema.
-          </div>
-        </div>
       </div>
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Consulta de inventario</h3>
-          <p class="sub">Puedes buscar y revisar existencias, pero no modificar el catálogo.</p>
-          <div class="note-box">
-            Para cambios directos al inventario maestro entra con el perfil <b>Administrador</b>.
-          </div>
-        </div>
-      </div>`;
-
-  return `
-    <div class="section-title">
-      <h2>Inventario</h2>
-      <p>${canManageInventory ? 'Aquí puedes cargar y administrar el inventario maestro.' : 'Vista de consulta del inventario maestro.'}</p>
-    </div>
-
-    <div class="metrics">
-      ${cardMetric({label:'Productos',value:String(inv.length),sub:'Inventario maestro',status:'good'})}
-      ${cardMetric({label:'Stock total',value:String(inv.reduce((a,b)=>a+Number(b.stock||0),0)),sub:'Existencia total',status:'good'})}
-      ${cardMetric({label:'Críticos',value:String(inv.filter(x=>x.critical).length),sub:'En mínimo o menos',status:inv.filter(x=>x.critical).length>0?'warn':'good'})}
-      ${cardMetric({label:'Ubicaciones',value:String(new Set(inv.map(x=>x.location||'')).size),sub:'Ubicaciones registradas',status:'good'})}
-    </div>
-
-    ${info ? `
-      <div class="note-box ${info.imported > 0 ? 'status-ok' : 'status-warn'}">
-        <b>Última importación</b><br>
-        Filas leídas: ${info.rowsRead} · Importadas: ${info.imported} · Omitidas: ${info.skipped}<br>
-        ${info.message || ''}
-      </div>` : ''}
-
-    <div class="grid-2">
-      ${manualSection}
-    </div>
-
-    <div class="actions-row" style="margin-top:18px">
-      <div style="flex:1;min-width:260px">
-        <input id="inventorySearch" placeholder="🔎 Buscar producto, código, categoría, ubicación o proveedor" value="${state.inventorySearch || ''}">
-      </div>
-    </div>
-
-    <div class="note-box">
-      <b>Cómo se mueve el stock:</b><br>
-      Stock actual = Existencia inicial + Entradas - Salidas.<br>
-      Para afectar correctamente el stock, en Almacén selecciona el producto desde el campo <b>Producto del inventario</b>.
     </div>
 
     <div class="table-title">Inventario cargado</div>
@@ -751,96 +453,16 @@ function vistaInventario(){
       {key:'stock',label:'Stock actual'},
       {key:'min',label:'Mínimo'},
       {key:'critical',label:'Estado',render:v=>v?'<span class="badge" style="background:#fff7ed;color:#c2410c">Crítico</span>':'<span class="badge" style="background:#ecfdf5;color:#166534">OK</span>'},
-      ...deleteColumn
-    ], filteredInv)}
-  `;
-}
-
-
-function vistaCompras(){
-  const inv = inventarioConStock();
-  const calc = state.purchaseCalc || {productId:'',monthlyDemand:'',leadDays:'',safetyDays:'',reviewDays:'',result:null};
-  const selected = inv.find(x => String(x.id) === String(calc.productId));
-
-  return `
-    <div class="section-title">
-      <h2>Compras</h2>
-      <p>Calcula mínimos y máximos de forma sencilla para apoyar la reposición.</p>
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Calculadora de mínimos y máximos</h3>
-          <p class="sub">Llenas los datos y el sistema te propone el mínimo y el máximo.</p>
-          <form id="purchaseCalcForm" class="form">
-            <div class="field">
-              <label>Producto</label>
-              <select name="productId">
-                <option value="">Selecciona un producto</option>
-                ${inv.map(x => `<option value="${x.id}" ${String(calc.productId)===String(x.id)?'selected':''}>${x.product}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field"><label>Consumo promedio mensual</label><input type="number" step="any" name="monthlyDemand" value="${calc.monthlyDemand || ''}" placeholder="Ej. 30"></div>
-            <div class="field"><label>Tiempo de entrega en días</label><input type="number" step="any" name="leadDays" value="${calc.leadDays || ''}" placeholder="Ej. 10"></div>
-            <div class="field"><label>Días de seguridad</label><input type="number" step="any" name="safetyDays" value="${calc.safetyDays || ''}" placeholder="Ej. 5"></div>
-            <div class="field"><label>Días de revisión</label><input type="number" step="any" name="reviewDays" value="${calc.reviewDays || ''}" placeholder="Ej. 15"></div>
-            <button class="save-btn" type="submit">Calcular</button>
-          </form>
-
-          <div class="note-box">
-            <b>Fórmulas:</b><br><br>
-            Consumo diario = Consumo mensual / 30<br>
-            Mínimo = Consumo diario × (Tiempo de entrega + Días de seguridad)<br>
-            Máximo = Mínimo + (Consumo diario × Días de revisión)
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Resultado</h3>
-          <p class="sub">Propuesta sugerida para compras</p>
-
-          ${calc.result ? `
-            <div class="metrics" style="grid-template-columns:repeat(2,1fr)">
-              ${cardMetric({label:'Consumo diario',value:String(calc.result.dailyDemand),sub:'Promedio diario',status:'good'})}
-              ${cardMetric({label:'Stock de seguridad',value:String(calc.result.safetyStock),sub:'Colchón recomendado',status:'good'})}
-              ${cardMetric({label:'Mínimo sugerido',value:String(calc.result.minSuggested),sub:'Punto de reposición',status:'warn'})}
-              ${cardMetric({label:'Máximo sugerido',value:String(calc.result.maxSuggested),sub:'Tope recomendado',status:'good'})}
-            </div>
-
-            <div class="note-box">
-              <b>Producto:</b> ${selected ? selected.product : 'Sin seleccionar'}<br><br>
-              Cuando el stock llegue al mínimo, conviene lanzar la reposición. El máximo te ayuda a no sobrecomprar.
-            </div>
-
-            ${selected ? `<div class="actions-row"><button class="save-btn" id="applyMinMaxBtn">Aplicar mínimo y máximo al producto</button></div>` : ''}
-          ` : `
-            <div class="note-box">Llena los datos de la izquierda y presiona <b>Calcular</b> para ver el resultado.</div>
-          `}
-        </div>
-      </div>
-    </div>
-
-    <div class="table-title">Resumen actual de inventario para compras</div>
-    ${tabla([
-      {key:'product',label:'Producto'},
-      {key:'stock',label:'Stock actual'},
-      {key:'min',label:'Mínimo'},
-      {key:'max',label:'Máximo'},
-      {key:'critical',label:'Estado',render:v=>v?'<span class="badge" style="background:#fff7ed;color:#c2410c">Revisar</span>':'<span class="badge" style="background:#ecfdf5;color:#166534">OK</span>'}
+      {key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="inventory" data-id="${row.id}">Borrar</button>`}
     ], inv)}
   `;
 }
 
-
 function vistaAlmacen(){
-  const inv = inventarioConStock();
   return `
     <div class="section-title">
       <h2>Almacén</h2>
-      <p>Captura rápida y tablas claras. Ahora las entradas y salidas se ligan directo al inventario.</p>
+      <p>Captura rápida y tablas claras.</p>
     </div>
 
     <div class="grid-3">
@@ -850,17 +472,7 @@ function vistaAlmacen(){
           <form id="entryForm" class="form">
             <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
             <div class="field"><label>Proveedor</label><input name="supplier"></div>
-            <div class="field"><label>Categoría (si es producto nuevo)</label><input name="category"></div>
-            <div class="field"><label>Ubicación (si es producto nuevo)</label><input name="location"></div>
-            <div class="field">
-              <label>Producto del inventario</label>
-              <select name="productId" id="entryProductId">
-                <option value="">Selecciona un producto</option>
-                ${inv.map(x => `<option value="${x.id}">${x.product}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field"><label>Producto manual (solo si no está en inventario)</label><input name="product"></div>
-            <div class="note-box">Si capturas un producto nuevo aquí y no existe en inventario, el sistema lo dará de alta automáticamente al guardar la entrada.</div>
+            <div class="field"><label>Producto</label><input name="product"></div>
             <div class="field"><label>Cantidad</label><input type="number" name="qty"></div>
             <label class="check"><input type="checkbox" name="sameDay" checked> Registrada el mismo día</label>
             <button class="save-btn" type="submit">Guardar</button>
@@ -874,15 +486,7 @@ function vistaAlmacen(){
           <form id="outputForm" class="form">
             <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
             <div class="field"><label>Área</label><select name="area"><option>Ventas</option><option>Servicio</option><option>Cliente</option></select></div>
-            <div class="field">
-              <label>Producto del inventario</label>
-              <select name="productId" id="outputProductId">
-                <option value="">Selecciona un producto</option>
-                ${inv.map(x => `<option value="${x.id}">${x.product}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field"><label>Producto manual (solo si no está en inventario)</label><input name="product"></div>
-            <div class="note-box">Si capturas un producto nuevo aquí y no existe en inventario, el sistema lo dará de alta automáticamente al guardar la entrada.</div>
+            <div class="field"><label>Producto</label><input name="product"></div>
             <div class="field"><label>Cantidad</label><input type="number" name="qty"></div>
             <label class="check"><input type="checkbox" name="doubleCheck" checked> Doble verificación</label>
             <button class="save-btn" type="submit">Guardar</button>
@@ -953,7 +557,6 @@ function vistaVentas(){
           <form id="salesForm" class="form">
             <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
             <div class="field"><label>Cliente</label><input name="client"></div>
-            <div class="field"><label>Vendedor</label><select name="seller"><option>Vendedor 1</option><option>Vendedor 2</option></select></div>
             <div class="field"><label>Tipo</label><select name="type"><option>Cotización</option><option>Seguimiento</option><option>Venta</option><option>Visita</option></select></div>
             <div class="field"><label>Monto</label><input type="number" name="amount"></div>
             <div class="field"><label>Estatus</label><select name="status"><option>Seguimiento</option><option>Ganada</option><option>Perdida</option></select></div>
@@ -1070,30 +673,9 @@ function attachEvents(){
     };
   });
 
-  const inventorySearch = main.querySelector('#inventorySearch');
-  if(inventorySearch) inventorySearch.oninput = (e)=>{
-    const value = e.target.value || '';
-    const start = e.target.selectionStart;
-    const end = e.target.selectionEnd;
-    const scrollY = window.scrollY;
-    state.inventorySearch = value;
-    guardar();
-    renderMain();
-    const searchAgain = document.getElementById('inventorySearch');
-    if(searchAgain){
-      searchAgain.focus();
-      try{ searchAgain.setSelectionRange(start, end); }catch(err){}
-    }
-    window.scrollTo(0, scrollY);
-  };
-
   const inventoryForm = main.querySelector('#inventoryForm');
   if(inventoryForm) inventoryForm.onsubmit = (e)=>{
     e.preventDefault();
-    if(session.role !== 'administrador'){
-      alert('Solo el administrador puede dar de alta productos en inventario.');
-      return;
-    }
     const fd = new FormData(inventoryForm);
     state.inventory.unshift({
       id:Date.now(),
@@ -1116,10 +698,6 @@ function attachEvents(){
   const importForm = main.querySelector('#importForm');
   if(importForm) importForm.onsubmit = (e)=>{
     e.preventDefault();
-    if(session.role !== 'administrador'){
-      alert('Solo el administrador puede importar inventario.');
-      return;
-    }
     const fileInput = document.getElementById('inventoryFile');
     const file = fileInput.files[0];
     const replace = document.getElementById('replaceInventory').checked;
@@ -1247,284 +825,30 @@ function attachEvents(){
     }
   };
 
-
-  const purchaseCalcForm = main.querySelector('#purchaseCalcForm');
-  if(purchaseCalcForm) purchaseCalcForm.onsubmit = (e)=>{
-    e.preventDefault();
-    const fd = new FormData(purchaseCalcForm);
-    const monthlyDemand = Number(fd.get('monthlyDemand') || 0);
-    const leadDays = Number(fd.get('leadDays') || 0);
-    const safetyDays = Number(fd.get('safetyDays') || 0);
-    const reviewDays = Number(fd.get('reviewDays') || 0);
-    const dailyDemand = +(monthlyDemand / 30).toFixed(2);
-    const safetyStock = +(dailyDemand * safetyDays).toFixed(2);
-    const minSuggested = Math.ceil(dailyDemand * (leadDays + safetyDays));
-    const maxSuggested = Math.ceil(minSuggested + (dailyDemand * reviewDays));
-    state.purchaseCalc = {
-      productId: fd.get('productId'),
-      monthlyDemand: fd.get('monthlyDemand'),
-      leadDays: fd.get('leadDays'),
-      safetyDays: fd.get('safetyDays'),
-      reviewDays: fd.get('reviewDays'),
-      result: { dailyDemand, safetyStock, minSuggested, maxSuggested }
-    };
-    guardar(); renderMain();
-  };
-
-  const applyMinMaxBtn = main.querySelector('#applyMinMaxBtn');
-  if(applyMinMaxBtn) applyMinMaxBtn.onclick = ()=>{
-    const calc = state.purchaseCalc || {};
-    if(!calc.productId || !calc.result){
-      alert('Primero calcula los valores.');
-      return;
-    }
-    state.inventory = state.inventory.map(item => String(item.id) === String(calc.productId)
-      ? { ...item, min: Number(calc.result.minSuggested || 0), max: Number(calc.result.maxSuggested || 0) }
-      : item
-    );
-    guardar();
-    renderMain();
-    alert('Mínimo y máximo aplicados al producto.');
-  };
-
-
-
-  const addOrderItemBtn = main.querySelector('#addOrderItemBtn');
-  if(addOrderItemBtn) addOrderItemBtn.onclick = ()=>{
-    if(session.role !== 'administrador'){
-      alert('Solo administración puede capturar pedidos.');
-      return;
-    }
-    const form = document.getElementById('orderDraftForm');
-    const fd = new FormData(form);
-    const productId = String(fd.get('productId') || '').trim();
-    const qty = Number(fd.get('qty') || 0);
-    if(!productId || qty <= 0){
-      alert('Selecciona producto y cantidad.');
-      return;
-    }
-    const product = nombreProducto(productId);
-    state.orderDraft = {
-      date: fd.get('date') || hoy(),
-      client: fd.get('client') || '',
-      notes: fd.get('notes') || '',
-      items: [...((state.orderDraft && Array.isArray(state.orderDraft.items)) ? state.orderDraft.items : []), { productId, product, qty }]
-    };
-    guardar();
-    renderMain();
-    alert('Partida agregada al pedido.');
-  };
-
-  const orderDraftForm = main.querySelector('#orderDraftForm');
-  if(orderDraftForm) orderDraftForm.onsubmit = (e)=>{
-    e.preventDefault();
-    if(session.role !== 'administrador'){
-      alert('Solo administración puede guardar pedidos.');
-      return;
-    }
-
-    const fd = new FormData(orderDraftForm);
-    const client = String(fd.get('client') || '').trim();
-    const date = fd.get('date') || hoy();
-    const notes = fd.get('notes') || '';
-
-    // Partidas ya agregadas previamente
-    let draftItems = [...((state.orderDraft && Array.isArray(state.orderDraft.items)) ? state.orderDraft.items : [])];
-
-    // Si el usuario llenó producto/cantidad pero no presionó "Agregar partida",
-    // la guardamos automáticamente para que el pedido no se pierda.
-    const currentProductId = String(fd.get('productId') || '').trim();
-    const currentQty = Number(fd.get('qty') || 0);
-    if(currentProductId && currentQty > 0){
-      const alreadyExistsSameLine = draftItems.some(it =>
-        String(it.productId) === currentProductId && Number(it.qty) === currentQty
-      );
-      if(!alreadyExistsSameLine){
-        draftItems.push({
-          productId: currentProductId,
-          product: nombreProducto(currentProductId),
-          qty: currentQty
-        });
-      }
-    }
-
-    if(!client){
-      alert('Captura el cliente.');
-      return;
-    }
-    if(draftItems.length === 0){
-      alert('Agrega al menos una partida o selecciona producto y cantidad.');
-      return;
-    }
-
-    if(!Array.isArray(state.orders)) state.orders = [];
-    state.orders.unshift({
-      id: Date.now(),
-      folio: siguienteFolioPedido(),
-      date: date,
-      client: client,
-      notes: notes,
-      status: 'Pendiente almacén',
-      items: draftItems
-    });
-
-    state.orderDraft = { date:hoy(), client:'', notes:'', items:[] };
-    guardar();
-    renderMain();
-    alert('Pedido guardado correctamente.');
-  };
-
-  main.querySelectorAll('[data-del-draft-item]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const idx = Number(btn.dataset.delDraftItem);
-      if(!state.orderDraft || !Array.isArray(state.orderDraft.items)) state.orderDraft = { date:hoy(), client:'', notes:'', items:[] };
-      state.orderDraft.items = (state.orderDraft.items || []).filter((_,i)=>i!==idx);
-      guardar();
-      renderMain();
-    };
-  });
-
-  main.querySelectorAll('[data-review-order]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const id = Number(btn.dataset.reviewOrder);
-      state.orders = (state.orders || []).map(order => {
-        if(order.id !== id) return order;
-        const complete = order.items.every(it => stockDisponible(it.productId) >= Number(it.qty));
-        return { ...order, status: complete ? 'Listo para surtir' : 'Incompleto' };
-      });
-      guardar();
-      renderMain();
-    };
-  });
-
-  main.querySelectorAll('[data-pack-order]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const id = Number(btn.dataset.packOrder);
-      const order = (state.orders || []).find(x => x.id === id);
-      if(!order) return;
-      const complete = order.items.every(it => stockDisponible(it.productId) >= Number(it.qty));
-      if(!complete){
-        alert('No hay suficiente inventario para empacar completo este pedido.');
-        return;
-      }
-      order.items.forEach(it => {
-        state.warehouseOutputs.unshift({
-          id: Date.now() + Math.floor(Math.random()*10000),
-          date: hoy(),
-          area: 'Pedido ' + order.folio,
-          productId: it.productId,
-          product: it.product,
-          qty: Number(it.qty || 0),
-          doubleCheck: true
-        });
-      });
-      state.orders = (state.orders || []).map(x => x.id === id ? { ...x, status:'Empacado' } : x);
-      guardar();
-      renderMain();
-    };
-  });
-
-  main.querySelectorAll('[data-invoice-order]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const id = Number(btn.dataset.invoiceOrder);
-      state.orders = (state.orders || []).map(x => x.id === id ? { ...x, status:'Facturado' } : x);
-      guardar();
-      renderMain();
-    };
-  });
-
-  main.querySelectorAll('[data-cancel-order]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const id = Number(btn.dataset.cancelOrder);
-      state.orders = (state.orders || []).map(x => x.id === id ? { ...x, status:'Cancelado' } : x);
-      guardar();
-      renderMain();
-    };
-  });
-
-
   const entryForm = main.querySelector('#entryForm');
   if(entryForm) entryForm.onsubmit = (e)=>{
     e.preventDefault();
     const fd = new FormData(entryForm);
-
-    let productId = String(fd.get('productId') || '').trim();
-    let productName = String(fd.get('product') || '').trim();
-    const supplier = String(fd.get('supplier') || '').trim();
-    const category = String(fd.get('category') || '').trim();
-    const location = String(fd.get('location') || '').trim();
-
-    // 1) Si seleccionaron producto del inventario, usar ese
-    if(productId){
-      const invItem = (state.inventory || []).find(x => String(x.id) === productId);
-      if(invItem){
-        productName = invItem.product;
-      }
-    }
-
-    // 2) Si no seleccionaron producto, intentar encontrarlo por nombre
-    if(!productId && productName){
-      const existing = (state.inventory || []).find(x =>
-        String(x.product || '').trim().toLowerCase() === productName.toLowerCase()
-      );
-      if(existing){
-        productId = String(existing.id);
-        productName = existing.product;
-      }
-    }
-
-    // 3) Si no existe en inventario, darlo de alta automático
-    if(!productId && productName){
-      const newInvId = Date.now() + Math.floor(Math.random()*10000);
-      const codeBase = productName
-        .toUpperCase()
-        .replace(/[^A-Z0-9]+/g,' ')
-        .trim()
-        .split(' ')
-        .slice(0,2)
-        .join('-') || 'PROD';
-      const newItem = {
-        id:newInvId,
-        code:'AUTO-' + codeBase,
-        product:productName,
-        category: category || 'Sin categoría',
-        location: location || 'Sin ubicación',
-        initialQty:0,
-        min:0,
-        max:0,
-        provider:supplier || ''
-      };
-      state.inventory.unshift(newItem);
-      productId = String(newInvId);
-    }
-
     state.warehouseEntries.unshift({
       id:Date.now(),
       date:fd.get('date'),
-      supplier:supplier,
-      productId: productId || '',
-      product: productName,
+      supplier:fd.get('supplier'),
+      product:fd.get('product'),
       qty:Number(fd.get('qty')||0),
       sameDay:!!fd.get('sameDay')
     });
-
-    guardar();
-    renderMain();
+    guardar(); renderMain();
   };
 
   const outputForm = main.querySelector('#outputForm');
   if(outputForm) outputForm.onsubmit = (e)=>{
     e.preventDefault();
     const fd = new FormData(outputForm);
-    const productId = fd.get('productId');
-    const invItem = (state.inventory || []).find(x => String(x.id) === String(productId));
-    const productName = invItem ? invItem.product : fd.get('product');
     state.warehouseOutputs.unshift({
       id:Date.now(),
       date:fd.get('date'),
       area:fd.get('area'),
-      productId: productId || '',
-      product: productName,
+      product:fd.get('product'),
       qty:Number(fd.get('qty')||0),
       doubleCheck:!!fd.get('doubleCheck')
     });
@@ -1554,7 +878,6 @@ function attachEvents(){
       id:Date.now(),
       date:fd.get('date'),
       client:fd.get('client'),
-      seller:fd.get('seller') || 'Vendedor 1',
       type:fd.get('type'),
       amount:Number(fd.get('amount')||0),
       status:fd.get('status'),
@@ -1584,13 +907,7 @@ function attachEvents(){
     btn.onclick = ()=>{
       const id = Number(btn.dataset.id);
       const type = btn.dataset.del;
-      if(type==='inventory'){
-        if(session.role !== 'administrador'){
-          alert('Solo el administrador puede borrar productos del inventario.');
-          return;
-        }
-        state.inventory = state.inventory.filter(x=>x.id!==id);
-      }
+      if(type==='inventory') state.inventory = state.inventory.filter(x=>x.id!==id);
       if(type==='entry') state.warehouseEntries = state.warehouseEntries.filter(x=>x.id!==id);
       if(type==='output') state.warehouseOutputs = state.warehouseOutputs.filter(x=>x.id!==id);
       if(type==='count') state.counts = state.counts.filter(x=>x.id!==id);
@@ -1605,6 +922,3 @@ render();
 </script>
 </body>
 </html>
-
-
- 
