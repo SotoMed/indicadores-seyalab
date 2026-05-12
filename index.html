@@ -178,7 +178,30 @@ const ADMIN_PASSWORD = '9wkmry1d';
 let state = cargar();
 let session = { role:'director', tab:'dashboard' };
 
+let pedidosPollingHandle = null;
+
+function iniciarPedidosAutoRefresh(){
+  detenerPedidosAutoRefresh();
+  pedidosPollingHandle = setInterval(async () => {
+    if(session.tab === 'pedidos' || session.tab === 'dashboard'){
+      await cargarPedidosSupabase(false);
+    }
+  }, 3000);
+}
+
+function detenerPedidosAutoRefresh(){
+  if(pedidosPollingHandle){
+    clearInterval(pedidosPollingHandle);
+    pedidosPollingHandle = null;
+  }
+}
+
 cargarPedidosSupabase();
+iniciarPedidosAutoRefresh();
+
+window.addEventListener('focus', async () => {
+  await cargarPedidosSupabase();
+});
 
 function cargar(){
   try{
@@ -276,7 +299,7 @@ function deserializarPedidoNotes(notes){
   }
 }
 
-async function cargarPedidosSupabase(){
+async function cargarPedidosSupabase(shouldRender = true){
   try{
     const { data, error } = await supabaseClient
       .from('orders')
@@ -301,7 +324,7 @@ async function cargarPedidosSupabase(){
       };
     });
 
-    if(session.tab === 'pedidos' || session.tab === 'dashboard'){
+    if(shouldRender && (session.tab === 'pedidos' || session.tab === 'dashboard')){
       renderMain();
     }
   }catch(err){
@@ -416,8 +439,11 @@ function renderTabs(){
     `<button class="tab-btn ${session.tab===tab?'active':''}" data-tab="${tab}">${tab.charAt(0).toUpperCase()+tab.slice(1)}</button>`
   ).join('');
   tabs.querySelectorAll('[data-tab]').forEach(btn=>{
-    btn.onclick = () => {
+    btn.onclick = async () => {
       session.tab = btn.dataset.tab;
+      if(session.tab === 'pedidos' || session.tab === 'dashboard'){
+        await cargarPedidosSupabase(false);
+      }
       renderMain();
       renderTabs();
     };
