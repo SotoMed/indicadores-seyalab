@@ -101,7 +101,6 @@ th{border-top:none;font-size:12px;color:#475569;text-transform:uppercase}
 <script>
 const SUPABASE_URL = 'https://miztzgfcglvqvvjjtcyv.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Nei-DTUW7PhVnrKHYHCM8g_9aWq7rvb';
-
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
 const STORAGE_KEY = 'seyalab_simple_inventario_v2';
@@ -116,6 +115,7 @@ const roles = {
 function hoy(){ return new Date().toISOString().slice(0,10); }
 function copiar(v){ return JSON.parse(JSON.stringify(v)); }
 function dinero(n){ return '$' + Number(n||0).toLocaleString(); }
+function esCerrada(status){ return String(status || '').toLowerCase() === 'cerrada' || String(status || '').toLowerCase() === 'ganada'; }
 function pct(a,b){ if(!b) return 0; return Math.round((a/b)*100); }
 function diasVencido(fecha){
   const a = new Date(fecha), b = new Date(hoy());
@@ -177,6 +177,8 @@ const seed = {
 const ADMIN_PASSWORD = '9wkmry1d';
 let state = cargar();
 let session = { role:'director', tab:'dashboard' };
+
+cargarPedidosSupabase();
 
 function cargar(){
   try{
@@ -250,6 +252,109 @@ function siguienteFolioPedido(){
   const list = state.orders || [];
   return 'PED-' + String(list.length + 1).padStart(3,'0');
 }
+
+
+function serializarPedidoNotes(texto, items){
+  return JSON.stringify({
+    text: texto || '',
+    items: Array.isArray(items) ? items : []
+  });
+}
+
+function deserializarPedidoNotes(notes){
+  try{
+    const parsed = JSON.parse(notes || '{}');
+    return {
+      text: parsed.text || '',
+      items: Array.isArray(parsed.items) ? parsed.items : []
+    };
+  }catch(err){
+    return {
+      text: notes || '',
+      items: []
+    };
+  }
+}
+
+async function cargarPedidosSupabase(){
+  try{
+    const { data, error } = await supabaseClient
+      .from('orders')
+      .select('*')
+      .order('id', { ascending: false });
+
+    if(error){
+      console.error('Error cargando pedidos desde Supabase:', error);
+      return;
+    }
+
+    state.orders = (data || []).map(row => {
+      const parsed = deserializarPedidoNotes(row.notes);
+      return {
+        id: row.id,
+        folio: row.folio,
+        date: row.order_date,
+        client: row.client,
+        notes: parsed.text || '',
+        status: row.status || 'Pendiente almacén',
+        items: parsed.items || []
+      };
+    });
+
+    if(session.tab === 'pedidos' || session.tab === 'dashboard'){
+      renderMain();
+    }
+  }catch(err){
+    console.error('Error general cargando pedidos:', err);
+  }
+}
+
+async function guardarPedidoSupabase(order){
+  const payload = {
+    folio: order.folio,
+    order_date: order.date,
+    client: order.client,
+    notes: serializarPedidoNotes(order.notes, order.items),
+    status: order.status || 'Pendiente almacén',
+    created_by: session.role,
+    invoiced: false
+  };
+
+  const { data, error } = await supabaseClient
+    .from('orders')
+    .insert(payload)
+    .select()
+    .single();
+
+  if(error) throw error;
+  return data;
+}
+
+async function actualizarPedidoSupabase(orderId, changes){
+  const payload = { ...changes };
+
+  if(Object.prototype.hasOwnProperty.call(changes, 'date')){
+    payload.order_date = changes.date;
+    delete payload.date;
+  }
+
+  if(Object.prototype.hasOwnProperty.call(changes, 'notes') || Object.prototype.hasOwnProperty.call(changes, 'items')){
+    const current = (state.orders || []).find(x => Number(x.id) === Number(orderId)) || {};
+    payload.notes = serializarPedidoNotes(
+      Object.prototype.hasOwnProperty.call(changes, 'notes') ? changes.notes : current.notes,
+      Object.prototype.hasOwnProperty.call(changes, 'items') ? changes.items : current.items
+    );
+    delete payload.items;
+  }
+
+  const { error } = await supabaseClient
+    .from('orders')
+    .update(payload)
+    .eq('id', orderId);
+
+  if(error) throw error;
+}
+
 
 function metricas(){
   const inv = inventarioConStock();
@@ -460,6 +565,9 @@ function vistaPedidos(){
     <div class="section-title">
       <h2>Pedidos</h2>
       <p>Aquí administración captura el pedido y almacén confirma si hay o no hay. Cuando almacén empaca, el stock baja automáticamente.</p>
+    </div>
+    <div class="actions-row">
+      <button class="ghost-btn" id="refreshOrdersBtn" type="button">Actualizar pedidos desde Supabase</button>
     </div>
 
     <div class="metrics">
@@ -1030,6 +1138,11 @@ function descargarPlantillaCSV(){
 function attachEvents(){
   const main = document.getElementById('main');
 
+  const refreshOrdersBtn = main.querySelector('#refreshOrdersBtn');
+  if(refreshOrdersBtn) refreshOrdersBtn.onclick = async ()=>{
+    await cargarPedidosSupabase();
+  };
+
   const noteForm = main.querySelector('#noteForm');
   if(noteForm){
     noteForm.onsubmit = (e)=>{
@@ -1316,62 +1429,64 @@ function attachEvents(){
   };
 
   const orderDraftForm = main.querySelector('#orderDraftForm');
-  if(orderDraftForm) orderDraftForm.onsubmit = (e)=>{
+  if(orderDraftForm) orderDraftForm.onsubmit = async (e)=>{
     e.preventDefault();
     if(session.role !== 'administrador'){
       alert('Solo administración puede guardar pedidos.');
       return;
     }
 
-    const fd = new FormData(orderDraftForm);
-    const client = String(fd.get('client') || '').trim();
-    const date = fd.get('date') || hoy();
-    const notes = fd.get('notes') || '';
+    try{
+      const fd = new FormData(orderDraftForm);
+      const client = String(fd.get('client') || '').trim();
+      const date = fd.get('date') || hoy();
+      const notes = fd.get('notes') || '';
 
-    // Partidas ya agregadas previamente
-    let draftItems = [...((state.orderDraft && Array.isArray(state.orderDraft.items)) ? state.orderDraft.items : [])];
+      let draftItems = [...((state.orderDraft && Array.isArray(state.orderDraft.items)) ? state.orderDraft.items : [])];
 
-    // Si el usuario llenó producto/cantidad pero no presionó "Agregar partida",
-    // la guardamos automáticamente para que el pedido no se pierda.
-    const currentProductId = String(fd.get('productId') || '').trim();
-    const currentQty = Number(fd.get('qty') || 0);
-    if(currentProductId && currentQty > 0){
-      const alreadyExistsSameLine = draftItems.some(it =>
-        String(it.productId) === currentProductId && Number(it.qty) === currentQty
-      );
-      if(!alreadyExistsSameLine){
-        draftItems.push({
-          productId: currentProductId,
-          product: nombreProducto(currentProductId),
-          qty: currentQty
-        });
+      const currentProductId = String(fd.get('productId') || '').trim();
+      const currentQty = Number(fd.get('qty') || 0);
+      if(currentProductId && currentQty > 0){
+        const alreadyExistsSameLine = draftItems.some(it =>
+          String(it.productId) === currentProductId && Number(it.qty) === currentQty
+        );
+        if(!alreadyExistsSameLine){
+          draftItems.push({
+            productId: currentProductId,
+            product: nombreProducto(currentProductId),
+            qty: currentQty
+          });
+        }
       }
-    }
 
-    if(!client){
-      alert('Captura el cliente.');
-      return;
-    }
-    if(draftItems.length === 0){
-      alert('Agrega al menos una partida o selecciona producto y cantidad.');
-      return;
-    }
+      if(!client){
+        alert('Captura el cliente.');
+        return;
+      }
+      if(draftItems.length === 0){
+        alert('Agrega al menos una partida o selecciona producto y cantidad.');
+        return;
+      }
 
-    if(!Array.isArray(state.orders)) state.orders = [];
-    state.orders.unshift({
-      id: Date.now(),
-      folio: siguienteFolioPedido(),
-      date: date,
-      client: client,
-      notes: notes,
-      status: 'Pendiente almacén',
-      items: draftItems
-    });
+      const orderToSave = {
+        folio: siguienteFolioPedido(),
+        date: date,
+        client: client,
+        notes: notes,
+        status: 'Pendiente almacén',
+        items: draftItems
+      };
 
-    state.orderDraft = { date:hoy(), client:'', notes:'', items:[] };
-    guardar();
-    renderMain();
-    alert('Pedido guardado correctamente.');
+      await guardarPedidoSupabase(orderToSave);
+      state.orderDraft = { date:hoy(), client:'', notes:'', items:[] };
+      await cargarPedidosSupabase();
+      guardar();
+      renderMain();
+      alert('Pedido guardado en Supabase.');
+    }catch(err){
+      console.error(err);
+      alert('No se pudo guardar el pedido en Supabase.');
+    }
   };
 
   main.querySelectorAll('[data-del-draft-item]').forEach(btn=>{
@@ -1385,22 +1500,28 @@ function attachEvents(){
   });
 
   main.querySelectorAll('[data-review-order]').forEach(btn=>{
-    btn.onclick = ()=>{
+    btn.onclick = async ()=>{
       const id = Number(btn.dataset.reviewOrder);
-      state.orders = (state.orders || []).map(order => {
-        if(order.id !== id) return order;
-        const complete = order.items.every(it => stockDisponible(it.productId) >= Number(it.qty));
-        return { ...order, status: complete ? 'Listo para surtir' : 'Incompleto' };
-      });
-      guardar();
-      renderMain();
+      const order = (state.orders || []).find(x => Number(x.id) === id);
+      if(!order) return;
+      const complete = order.items.every(it => stockDisponible(it.productId) >= Number(it.qty));
+      const newStatus = complete ? 'Listo para surtir' : 'Incompleto';
+      try{
+        await actualizarPedidoSupabase(id, { status: newStatus });
+        await cargarPedidosSupabase();
+        guardar();
+        renderMain();
+      }catch(err){
+        console.error(err);
+        alert('No se pudo actualizar el pedido en Supabase.');
+      }
     };
   });
 
   main.querySelectorAll('[data-pack-order]').forEach(btn=>{
-    btn.onclick = ()=>{
+    btn.onclick = async ()=>{
       const id = Number(btn.dataset.packOrder);
-      const order = (state.orders || []).find(x => x.id === id);
+      const order = (state.orders || []).find(x => Number(x.id) === id);
       if(!order) return;
       const complete = order.items.every(it => stockDisponible(it.productId) >= Number(it.qty));
       if(!complete){
@@ -1418,27 +1539,45 @@ function attachEvents(){
           doubleCheck: true
         });
       });
-      state.orders = (state.orders || []).map(x => x.id === id ? { ...x, status:'Empacado' } : x);
-      guardar();
-      renderMain();
+      try{
+        await actualizarPedidoSupabase(id, { status:'Empacado' });
+        await cargarPedidosSupabase();
+        guardar();
+        renderMain();
+      }catch(err){
+        console.error(err);
+        alert('No se pudo marcar como empacado en Supabase.');
+      }
     };
   });
 
   main.querySelectorAll('[data-invoice-order]').forEach(btn=>{
-    btn.onclick = ()=>{
+    btn.onclick = async ()=>{
       const id = Number(btn.dataset.invoiceOrder);
-      state.orders = (state.orders || []).map(x => x.id === id ? { ...x, status:'Facturado' } : x);
-      guardar();
-      renderMain();
+      try{
+        await actualizarPedidoSupabase(id, { status:'Facturado', invoiced:true });
+        await cargarPedidosSupabase();
+        guardar();
+        renderMain();
+      }catch(err){
+        console.error(err);
+        alert('No se pudo marcar como facturado en Supabase.');
+      }
     };
   });
 
   main.querySelectorAll('[data-cancel-order]').forEach(btn=>{
-    btn.onclick = ()=>{
+    btn.onclick = async ()=>{
       const id = Number(btn.dataset.cancelOrder);
-      state.orders = (state.orders || []).map(x => x.id === id ? { ...x, status:'Cancelado' } : x);
-      guardar();
-      renderMain();
+      try{
+        await actualizarPedidoSupabase(id, { status:'Cancelado' });
+        await cargarPedidosSupabase();
+        guardar();
+        renderMain();
+      }catch(err){
+        console.error(err);
+        alert('No se pudo cancelar el pedido en Supabase.');
+      }
     };
   });
 
