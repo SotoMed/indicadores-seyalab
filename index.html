@@ -185,14 +185,11 @@ function tabNecesitaPedidos(tab){
 }
 
 function tabNecesitaAlmacen(tab){
-  return tab === 'inventario' || tab === 'almacen' || tab === 'compras' || tab === 'pedidos' || tab === 'dashboard';
+  return tab === 'pedidos' || tab === 'dashboard';
 }
 
-function usuarioEditandoFormulario(){
-  const el = document.activeElement;
-  if(!el) return false;
-  const tag = (el.tagName || '').toLowerCase();
-  return tag === 'input' || tag === 'textarea' || tag === 'select';
+function tabCargaAlmacen(tab){
+  return tab === 'inventario' || tab === 'almacen' || tab === 'compras' || tab === 'pedidos' || tab === 'dashboard';
 }
 
 function iniciarAutoSync(){
@@ -202,8 +199,7 @@ function iniciarAutoSync(){
       await cargarPedidosSupabase(true);
     }
     if(tabNecesitaAlmacen(session.tab)){
-      const shouldRender = !usuarioEditandoFormulario();
-      await cargarAlmacenSupabase(shouldRender);
+      await cargarAlmacenSupabase(true);
     }
   }, 3000);
 }
@@ -221,7 +217,7 @@ iniciarAutoSync();
 
 window.addEventListener('focus', async () => {
   await cargarPedidosSupabase();
-  await cargarAlmacenSupabase(!usuarioEditandoFormulario());
+  await cargarAlmacenSupabase();
 });
 
 function cargar(){
@@ -465,7 +461,7 @@ async function cargarAlmacenSupabase(shouldRender = true){
       });
     }
 
-    if(shouldRender && tabNecesitaAlmacen(session.tab)){
+    if(shouldRender && tabCargaAlmacen(session.tab)){
       renderMain();
     }
   }catch(err){
@@ -620,7 +616,7 @@ function renderTabs(){
       if(tabNecesitaPedidos(session.tab)){
         await cargarPedidosSupabase(false);
       }
-      if(tabNecesitaAlmacen(session.tab)){
+      if(tabCargaAlmacen(session.tab)){
         await cargarAlmacenSupabase(false);
       }
       renderMain();
@@ -1024,8 +1020,11 @@ function vistaInventario(){
       <h2>Inventario</h2>
       <p>${canManageInventory ? 'Aquí puedes cargar y administrar el inventario maestro.' : 'Vista de consulta del inventario maestro.'}</p>
     </div>
+    <div class="actions-row">
+      <button class="ghost-btn" id="refreshInventoryBtn" type="button">Actualizar inventario desde Supabase</button>
+    </div>
     <div class="note-box">
-      Mientras capturas datos, el sistema ya no debe recargar esta pantalla solo. El inventario compartido seguirá sincronizándose sin interrumpir la escritura.
+      En Inventario se desactivó la auto-recarga para que no interfiera cuando capturas código y nombre de producto.
     </div>
 
     <div class="metrics">
@@ -1352,6 +1351,11 @@ function attachEvents(){
     await cargarPedidosSupabase();
   };
 
+  const refreshInventoryBtn = main.querySelector('#refreshInventoryBtn');
+  if(refreshInventoryBtn) refreshInventoryBtn.onclick = async ()=>{
+    await cargarAlmacenSupabase();
+  };
+
   const noteForm = main.querySelector('#noteForm');
   if(noteForm){
     noteForm.onsubmit = (e)=>{
@@ -1412,6 +1416,7 @@ function attachEvents(){
   const inventoryForm = main.querySelector('#inventoryForm');
   if(inventoryForm) inventoryForm.onsubmit = async (e)=>{
     e.preventDefault();
+    detenerAutoSync();
     if(session.role !== 'administrador'){
       alert('Solo el administrador puede dar de alta productos en inventario.');
       return;
@@ -1435,6 +1440,8 @@ function attachEvents(){
     }catch(err){
       console.error(err);
       alert('No se pudo guardar el producto en Supabase.');
+    }finally{
+      iniciarAutoSync();
     }
   };
 
@@ -1444,6 +1451,7 @@ function attachEvents(){
   const importForm = main.querySelector('#importForm');
   if(importForm) importForm.onsubmit = (e)=>{
     e.preventDefault();
+    detenerAutoSync();
     if(session.role !== 'administrador'){
       alert('Solo el administrador puede importar inventario.');
       return;
@@ -1599,6 +1607,8 @@ function attachEvents(){
         }catch(syncErr){
           console.error(syncErr);
           alert('Se leyó el archivo, pero no se pudo guardar el inventario en Supabase. Revisa si el archivo trae datos repetidos o vacíos.');
+        }finally{
+          iniciarAutoSync();
         }
       }catch(err){
         state.importInfo = {
@@ -1610,6 +1620,7 @@ function attachEvents(){
         guardar();
         renderMain();
         alert('No se pudo importar el archivo. Si sigue fallando, guárdalo como CSV.');
+        iniciarAutoSync();
       }
     };
     if(file.name.toLowerCase().endsWith('.csv')){
