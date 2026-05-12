@@ -466,9 +466,10 @@ async function cargarAlmacenSupabase(shouldRender = true){
 }
 
 async function insertarProductoSupabase(item){
+  const cleanCode = String(item.code || '').trim() || null;
   const payload = {
-    code: item.code || null,
-    product: item.product || '',
+    code: cleanCode,
+    product: String(item.product || '').trim(),
     category: item.category || null,
     location: item.location || null,
     initial_qty: Number(item.initialQty || 0),
@@ -477,6 +478,17 @@ async function insertarProductoSupabase(item){
     provider: item.provider || null,
     active: true
   };
+
+  if(cleanCode){
+    const { data, error } = await supabaseClient
+      .from('inventory')
+      .upsert(payload, { onConflict: 'code' })
+      .select()
+      .single();
+    if(error) throw error;
+    return data;
+  }
+
   const { data, error } = await supabaseClient
     .from('inventory')
     .insert(payload)
@@ -965,7 +977,8 @@ function vistaInventario(){
           <div class="note-box">
             Columnas sugeridas:<br>
             <b>codigo, producto, categoria, ubicacion, existencia_inicial, minimo, maximo, proveedor</b><br><br>
-            También acepta variantes como: <b>code, product, category, location, cantidad, existencia, min, max, provider</b>.
+            También acepta variantes como: <b>code, product, category, location, cantidad, existencia, min, max, provider</b>.<br><br>
+            Si tu archivo no trae código, el sistema genera uno automático para que sí pueda subirlo a Supabase.
           </div>
           <form id="importForm" class="form">
             <div class="field">
@@ -1497,22 +1510,45 @@ function attachEvents(){
         let imported = 0;
         let skipped = 0;
 
+        const usedCodes = new Set();
         const nuevos = dataRows.map((row, idx) => {
-          const product = idxProduct >= 0 ? row[idxProduct] : '';
-          const code = idxCode >= 0 ? row[idxCode] : '';
+          const rawProduct = idxProduct >= 0 ? row[idxProduct] : '';
+          const rawCode = idxCode >= 0 ? row[idxCode] : '';
           const qty = idxQty >= 0 ? row[idxQty] : 0;
 
+          const product = String(rawProduct || rawCode || '').trim();
+          let code = String(rawCode || '').trim();
+
           // Saltar filas vacías
-          if(!String(product || '').trim() && !String(code || '').trim()){
+          if(!product && !code){
             skipped++;
             return null;
           }
 
+          // Si no hay código, generar uno estable para evitar choques y permitir importar
+          if(!code){
+            const base = product
+              .toUpperCase()
+              .replace(/[^A-Z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '')
+              .slice(0, 24) || 'ITEM';
+            code = 'IMP-' + base + '-' + String(idx + 1).padStart(4, '0');
+          }
+
+          // Si viene repetido en el mismo archivo, agregar sufijo
+          let finalCode = code;
+          let suffix = 2;
+          while(usedCodes.has(finalCode)){
+            finalCode = code + '-' + suffix;
+            suffix++;
+          }
+          usedCodes.add(finalCode);
+
           imported++;
           return {
             id: Date.now() + idx + Math.floor(Math.random()*100000),
-            code: String(code || '').trim(),
-            product: String(product || '').trim(),
+            code: finalCode,
+            product: product,
             category: idxCategory >= 0 ? String(row[idxCategory] || '').trim() : '',
             location: idxLocation >= 0 ? String(row[idxLocation] || '').trim() : '',
             initialQty: Number(qty || 0),
@@ -1523,8 +1559,13 @@ function attachEvents(){
         }).filter(Boolean);
 
         try{
+          if(nuevos.length === 0){
+            alert('No se encontraron productos válidos para importar.');
+            return;
+          }
+
           if(replace){
-            // Borra inventario maestro actual antes de reimportar.
+            // Reemplazo total del inventario maestro actual.
             for(const item of [...state.inventory]){
               await borrarRegistroSupabase('inventory', item.id);
             }
@@ -1539,14 +1580,14 @@ function attachEvents(){
             rowsRead: dataRows.length,
             imported,
             skipped,
-            message: 'Encabezados detectados en la fila ' + (headerRowIndex + 1) + '. Inventario enviado a la base compartida.'
+            message: 'Encabezados detectados en la fila ' + (headerRowIndex + 1) + '. Inventario enviado correctamente a Supabase.'
           };
           guardar();
           renderMain();
           alert('Importación terminada. Importados: ' + imported + ' | Omitidos: ' + skipped);
         }catch(syncErr){
           console.error(syncErr);
-          alert('Se leyó el archivo, pero no se pudo guardar el inventario en Supabase.');
+          alert('Se leyó el archivo, pero no se pudo guardar el inventario en Supabase. Revisa si el archivo trae datos repetidos o vacíos.');
         }
       }catch(err){
         state.importInfo = {
