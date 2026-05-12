@@ -188,6 +188,10 @@ function tabNecesitaAlmacen(tab){
   return tab === 'pedidos' || tab === 'dashboard';
 }
 
+function tabNecesitaVentas(tab){
+  return tab === 'ventas' || tab === 'dashboard';
+}
+
 function tabCargaAlmacen(tab){
   return tab === 'inventario' || tab === 'almacen' || tab === 'compras' || tab === 'pedidos' || tab === 'dashboard';
 }
@@ -201,6 +205,9 @@ function iniciarAutoSync(){
     if(tabNecesitaAlmacen(session.tab)){
       await cargarAlmacenSupabase(true);
     }
+    if(tabNecesitaVentas(session.tab)){
+      await cargarVentasSupabase(true);
+    }
   }, 3000);
 }
 
@@ -213,11 +220,13 @@ function detenerAutoSync(){
 
 cargarPedidosSupabase();
 cargarAlmacenSupabase();
+cargarVentasSupabase();
 iniciarAutoSync();
 
 window.addEventListener('focus', async () => {
   await cargarPedidosSupabase();
   await cargarAlmacenSupabase();
+  await cargarVentasSupabase();
 });
 
 function cargar(){
@@ -551,19 +560,81 @@ async function registrarSalidaSupabase(output){
 }
 
 
+
+async function cargarVentasSupabase(shouldRender = true){
+  try{
+    const { data, error } = await supabaseClient
+      .from('sales')
+      .select('*')
+      .order('id', { ascending: false });
+
+    if(error){
+      console.error('Error cargando ventas desde Supabase:', error);
+      return;
+    }
+
+    state.sales = (data || []).map(row => ({
+      id: row.id,
+      date: row.sale_date,
+      client: row.client || '',
+      seller: row.seller || 'Vendedor 1',
+      contact: row.contact || '',
+      type: row.sale_type || '',
+      amount: Number(row.amount || 0),
+      status: row.status || 'Seguimiento',
+      nextFollowUp: row.next_follow_up || '',
+      priority: row.priority || '',
+      notes: row.notes || '',
+      followUp48h: !!row.follow_up_48h
+    }));
+
+    if(shouldRender && tabNecesitaVentas(session.tab)){
+      renderMain();
+    }
+  }catch(err){
+    console.error('Error general cargando ventas:', err);
+  }
+}
+
+async function guardarVentaSupabase(item){
+  const payload = {
+    sale_date: item.date || hoy(),
+    client: item.client || '',
+    seller: item.seller || 'Vendedor 1',
+    contact: item.contact || null,
+    sale_type: item.type || null,
+    amount: Number(item.amount || 0),
+    status: item.status || 'Seguimiento',
+    next_follow_up: item.nextFollowUp || null,
+    priority: item.priority || null,
+    notes: item.notes || null,
+    follow_up_48h: !!item.followUp48h
+  };
+
+  const { data, error } = await supabaseClient
+    .from('sales')
+    .insert(payload)
+    .select()
+    .single();
+
+  if(error) throw error;
+  return data;
+}
+
+
 function metricas(){
   const inv = inventarioConStock();
-  const ganadas = state.sales.filter(x => x.status === 'Ganada');
-  const ventasMonto = ganadas.reduce((a,b)=>a+Number(b.amount||0),0);
-  const conversion = pct(ganadas.length, state.sales.length || 1);
+  const cerradas = state.sales.filter(x => esCerrada(x.status));
+  const ventasMonto = cerradas.reduce((a,b)=>a+Number(b.amount||0),0);
+  const conversion = pct(cerradas.length, state.sales.length || 1);
   const entradasDia = pct(state.warehouseEntries.filter(x=>x.sameDay).length, state.warehouseEntries.length || 1);
   const abiertas = state.collections.filter(x=>!x.paid);
   const vencidas = abiertas.filter(x=>diasVencido(x.dueDate)>0);
   const vencidaPct = pct(vencidas.length, abiertas.length || 1);
 
   return {
-    salesAmount:{label:'Ventas del mes',value:dinero(ventasMonto),sub:'Monto ganado',status:'good'},
-    conversion:{label:'Conversión',value:conversion+'%',sub:'Ganadas vs registradas',status:estado(conversion,35,20)},
+    salesAmount:{label:'Ventas del mes',value:dinero(ventasMonto),sub:'Monto cerrado',status:'good'},
+    conversion:{label:'Conversión',value:conversion+'%',sub:'Cerradas vs registradas',status:estado(conversion,35,20)},
     entriesSameDay:{label:'Entradas al día',value:entradasDia+'%',sub:'Registro el mismo día',status:estado(entradasDia,95,80)},
     overduePct:{label:'Cobranza vencida',value:vencidaPct+'%',sub:'Facturas abiertas vencidas',status:vencidaPct<=10?'good':vencidaPct<=25?'warn':'bad'},
     itemsCount:{label:'Productos cargados',value:String(inv.length),sub:'Inventario maestro',status:'good'},
@@ -618,6 +689,9 @@ function renderTabs(){
       }
       if(tabCargaAlmacen(session.tab)){
         await cargarAlmacenSupabase(false);
+      }
+      if(tabNecesitaVentas(session.tab)){
+        await cargarVentasSupabase(false);
       }
       renderMain();
       renderTabs();
@@ -1301,10 +1375,26 @@ function vistaAlmacen(){
 }
 
 function vistaVentas(){
+  const salesBase = state.sales || [];
+  const seller1Closed = salesBase.filter(x => (x.seller || '') === 'Vendedor 1' && esCerrada(x.status));
+  const seller2Closed = salesBase.filter(x => (x.seller || '') === 'Vendedor 2' && esCerrada(x.status));
+  const followups = salesBase.filter(x => x.status === 'Seguimiento').length;
+
   return `
     <div class="section-title">
       <h2>Ventas</h2>
-      <p>Registro simple de cotizaciones, visitas y ventas.</p>
+      <p>Registro comercial compartido. Lo que capture ventas impacta en el dashboard del director.</p>
+    </div>
+
+    <div class="actions-row">
+      <button class="ghost-btn" id="refreshSalesBtn" type="button">Actualizar ventas desde Supabase</button>
+    </div>
+
+    <div class="metrics">
+      ${cardMetric({label:'Ventas cerradas V1',value:dinero(seller1Closed.reduce((a,b)=>a+Number(b.amount||0),0)),sub:'Monto cerrado Vendedor 1',status:'good'})}
+      ${cardMetric({label:'Ventas cerradas V2',value:dinero(seller2Closed.reduce((a,b)=>a+Number(b.amount||0),0)),sub:'Monto cerrado Vendedor 2',status:'good'})}
+      ${cardMetric({label:'Seguimientos',value:String(followups),sub:'Oportunidades activas',status:followups>0?'warn':'good'})}
+      ${cardMetric({label:'Registros',value:String(salesBase.length),sub:'Actividades comerciales',status:'good'})}
     </div>
 
     <div class="grid-2">
@@ -1315,9 +1405,13 @@ function vistaVentas(){
             <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
             <div class="field"><label>Cliente</label><input name="client"></div>
             <div class="field"><label>Vendedor</label><select name="seller"><option>Vendedor 1</option><option>Vendedor 2</option></select></div>
+            <div class="field"><label>Contacto</label><input name="contact" placeholder="Ej. Compras / Dirección"></div>
             <div class="field"><label>Tipo</label><select name="type"><option>Cotización</option><option>Seguimiento</option><option>Venta</option><option>Visita</option></select></div>
             <div class="field"><label>Monto</label><input type="number" name="amount"></div>
             <div class="field"><label>Estatus</label><select name="status"><option>Seguimiento</option><option>Ganada</option><option>Perdida</option></select></div>
+            <div class="field"><label>Próximo seguimiento</label><input type="date" name="nextFollowUp" value="${hoy()}"></div>
+            <div class="field"><label>Prioridad</label><select name="priority"><option>Alta</option><option>Media</option><option>Baja</option></select></div>
+            <div class="field"><label>Notas</label><textarea name="notes" placeholder="Detalle breve de la oportunidad"></textarea></div>
             <label class="check"><input type="checkbox" name="followUp48h" checked> Seguimiento dentro de 48h</label>
             <button class="save-btn" type="submit">Guardar</button>
           </form>
@@ -1328,11 +1422,13 @@ function vistaVentas(){
         ${tabla([
           {key:'date',label:'Fecha'},
           {key:'client',label:'Cliente'},
+          {key:'seller',label:'Vendedor'},
           {key:'type',label:'Tipo'},
           {key:'amount',label:'Monto',render:v=>dinero(v)},
           {key:'status',label:'Estatus'},
+          {key:'nextFollowUp',label:'Próx. seguimiento'},
           {key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="sale" data-id="${row.id}">Borrar</button>`}
-        ], state.sales)}
+        ], salesBase)}
       </div>
     </div>`;
 }
@@ -2035,20 +2131,31 @@ function attachEvents(){
   };
 
   const salesForm = main.querySelector('#salesForm');
-  if(salesForm) salesForm.onsubmit = (e)=>{
+  if(salesForm) salesForm.onsubmit = async (e)=>{
     e.preventDefault();
-    const fd = new FormData(salesForm);
-    state.sales.unshift({
-      id:Date.now(),
-      date:fd.get('date'),
-      client:fd.get('client'),
-      seller:fd.get('seller') || 'Vendedor 1',
-      type:fd.get('type'),
-      amount:Number(fd.get('amount')||0),
-      status:fd.get('status'),
-      followUp48h:!!fd.get('followUp48h')
-    });
-    guardar(); renderMain();
+    try{
+      const fd = new FormData(salesForm);
+      await guardarVentaSupabase({
+        date: fd.get('date'),
+        client: fd.get('client'),
+        seller: fd.get('seller') || 'Vendedor 1',
+        contact: fd.get('contact'),
+        type: fd.get('type'),
+        amount: Number(fd.get('amount')||0),
+        status: fd.get('status'),
+        nextFollowUp: fd.get('nextFollowUp'),
+        priority: fd.get('priority'),
+        notes: fd.get('notes'),
+        followUp48h: !!fd.get('followUp48h')
+      });
+      await cargarVentasSupabase(false);
+      guardar();
+      renderMain();
+      alert('Venta guardada en Supabase.');
+    }catch(err){
+      console.error(err);
+      alert('No se pudo guardar la venta en Supabase.');
+    }
   };
 
   const colForm = main.querySelector('#colForm');
@@ -2089,7 +2196,8 @@ function attachEvents(){
         } else if(type==='count'){
           state.counts = state.counts.filter(x=>x.id!==id);
         } else if(type==='sale'){
-          state.sales = state.sales.filter(x=>x.id!==id);
+          await borrarRegistroSupabase('sales', id);
+          await cargarVentasSupabase(false);
         } else if(type==='collection'){
           state.collections = state.collections.filter(x=>x.id!==id);
         }
@@ -2103,7 +2211,7 @@ function attachEvents(){
   });
 }
 
-Promise.all([cargarPedidosSupabase(false), cargarAlmacenSupabase(false)]).finally(() => {
+Promise.all([cargarPedidosSupabase(false), cargarAlmacenSupabase(false), cargarVentasSupabase(false)]).finally(() => {
   render();
 });
 </script>
