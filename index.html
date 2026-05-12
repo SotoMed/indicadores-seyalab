@@ -188,6 +188,13 @@ function tabNecesitaAlmacen(tab){
   return tab === 'inventario' || tab === 'almacen' || tab === 'compras' || tab === 'pedidos' || tab === 'dashboard';
 }
 
+function usuarioEditandoFormulario(){
+  const el = document.activeElement;
+  if(!el) return false;
+  const tag = (el.tagName || '').toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select';
+}
+
 function iniciarAutoSync(){
   detenerAutoSync();
   syncPollingHandle = setInterval(async () => {
@@ -195,7 +202,8 @@ function iniciarAutoSync(){
       await cargarPedidosSupabase(true);
     }
     if(tabNecesitaAlmacen(session.tab)){
-      await cargarAlmacenSupabase(true);
+      const shouldRender = !usuarioEditandoFormulario();
+      await cargarAlmacenSupabase(shouldRender);
     }
   }, 3000);
 }
@@ -213,7 +221,7 @@ iniciarAutoSync();
 
 window.addEventListener('focus', async () => {
   await cargarPedidosSupabase();
-  await cargarAlmacenSupabase();
+  await cargarAlmacenSupabase(!usuarioEditandoFormulario());
 });
 
 function cargar(){
@@ -1015,6 +1023,9 @@ function vistaInventario(){
     <div class="section-title">
       <h2>Inventario</h2>
       <p>${canManageInventory ? 'Aquí puedes cargar y administrar el inventario maestro.' : 'Vista de consulta del inventario maestro.'}</p>
+    </div>
+    <div class="note-box">
+      Mientras capturas datos, el sistema ya no debe recargar esta pantalla solo. El inventario compartido seguirá sincronizándose sin interrumpir la escritura.
     </div>
 
     <div class="metrics">
