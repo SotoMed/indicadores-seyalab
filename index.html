@@ -3,2339 +3,1760 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Seyalab | Panel simple con importación robusta</title>
+<title>SotoMed Control | Administración + Pedidos vendedores</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
-  --bg:#f4f7fb; --card:#fff; --line:#dbe3ec; --text:#16202b; --muted:#64748b;
-  --navy:#0b3a70; --teal:#0ea5a4; --good:#10b981; --warn:#f59e0b; --bad:#e11d48;
+  --bg:#f4f7fb;
+  --card:#ffffff;
+  --line:#dbe3ec;
+  --text:#172033;
+  --muted:#64748b;
+  --navy:#0b3a70;
+  --teal:#0ea5a4;
+  --green:#10b981;
+  --amber:#f59e0b;
+  --red:#e11d48;
+  --blue:#2563eb;
   --shadow:0 10px 24px rgba(15,23,42,.07);
 }
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}
 button,input,select,textarea{font:inherit}
+button{cursor:pointer}
 h1,h2,h3,p{margin:0}
-.wrap{max-width:1220px;margin:0 auto;padding:20px}
-.hidden{display:none!important}
-.top{background:linear-gradient(135deg,var(--navy),#134a8d);color:#fff;padding:24px;border-radius:24px;box-shadow:var(--shadow)}
-.top h1{font-size:30px;letter-spacing:-.03em}
-.top p{margin-top:8px;color:#dbeafe}
-.role-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
-.role-btn,.tab-btn,.ghost-btn,.danger-btn,.save-btn,.download-btn{
-  border:none;border-radius:14px;padding:10px 14px;cursor:pointer;font-weight:700
+.wrap{max-width:1180px;margin:0 auto;padding:20px}
+.top{
+  background:linear-gradient(135deg,var(--navy),#155ca8);
+  color:#fff;
+  padding:24px;
+  border-radius:24px;
+  box-shadow:var(--shadow);
 }
-.role-btn,.tab-btn,.ghost-btn,.download-btn{background:#fff;color:#0f172a;border:1px solid var(--line)}
-.role-btn.active,.tab-btn.active{background:var(--teal);color:#fff;border-color:var(--teal)}
-.layout{display:grid;grid-template-columns:220px 1fr;gap:16px;margin-top:16px}
-.sidebar,.panel,.card{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow)}
-.sidebar{padding:16px;height:fit-content}
-.sidebar h3{font-size:18px}
-.sidebar p{margin-top:6px;color:var(--muted);font-size:13px;line-height:1.5}
-.tabs{display:grid;gap:8px;margin-top:14px}
-.tab-btn{text-align:left}
-.panel{padding:18px}
+.top h1{font-size:30px;letter-spacing:-.03em}
+.top p{margin-top:8px;color:#dbeafe;line-height:1.5}
+.top-row{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.status-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);padding:9px 12px;border-radius:999px;font-weight:700}
+.status-dot{width:10px;height:10px;border-radius:999px;background:#fbbf24}
+.status-dot.ok{background:#34d399}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.tab-btn,.save-btn,.ghost-btn,.danger-btn,.small-btn{
+  border:none;border-radius:14px;padding:10px 14px;font-weight:800;
+}
+.tab-btn,.ghost-btn,.small-btn{background:#fff;color:#0f172a;border:1px solid var(--line)}
+.tab-btn.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+.save-btn{background:linear-gradient(135deg,var(--teal),#0b8f8e);color:#fff}
+.danger-btn{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3}
+.small-btn{padding:7px 10px;border-radius:10px;font-size:13px}
+.panel{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);padding:18px}
+.section-title{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
 .section-title h2{font-size:26px;letter-spacing:-.03em}
-.section-title p{margin-top:6px;color:var(--muted);font-size:14px}
+.section-title p{margin-top:6px;color:var(--muted);font-size:14px;line-height:1.5}
+.month-box{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#f8fafc;border:1px solid var(--line);border-radius:16px;padding:10px}
+.month-box label{font-size:13px;font-weight:800;color:#475569}
+input,select,textarea{
+  width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;color:#0f172a;
+}
+textarea{min-height:86px;resize:vertical}
 .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
 .metric{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px;position:relative;overflow:hidden}
 .metric::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:#cbd5e1}
-.metric.good::before{background:var(--good)}
-.metric.warn::before{background:var(--warn)}
-.metric.bad::before{background:var(--bad)}
+.metric.good::before{background:var(--green)}
+.metric.warn::before{background:var(--amber)}
+.metric.bad::before{background:var(--red)}
+.metric.blue::before{background:var(--blue)}
 .metric .l{font-size:13px;color:var(--muted)}
-.metric .v{margin-top:8px;font-size:30px;font-weight:800}
-.metric .s{margin-top:8px;font-size:13px;color:var(--muted)}
+.metric .v{margin-top:8px;font-size:27px;font-weight:900;letter-spacing:-.03em}
+.metric .s{margin-top:8px;font-size:13px;color:var(--muted);line-height:1.45}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
 .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:16px}
-.card{padding:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:18px}
 .card h3{font-size:20px;letter-spacing:-.02em}
-.card p.sub{margin-top:6px;color:var(--muted);font-size:13px}
+.card p.sub{margin-top:6px;color:var(--muted);font-size:13px;line-height:1.5}
 .form{display:grid;gap:10px;margin-top:14px}
 .field{display:grid;gap:5px}
-.field label{font-size:12px;font-weight:700;color:#475569}
-input,select,textarea{width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;color:#0f172a}
-textarea{min-height:90px;resize:vertical}
-.check{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff;font-size:14px}
-input[type="checkbox"]{width:auto}
-.save-btn{background:linear-gradient(135deg,var(--teal),#0b8f8e);color:#fff}
-.download-btn{background:#eef6ff;border-color:#bfd7f4;color:#0b3a70}
-.ghost-btn{background:#fff}
-.danger-btn{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3}
-.table-title{margin-top:18px;font-size:18px;font-weight:800}
-.table-wrap{margin-top:10px;border:1px solid var(--line);border-radius:18px;overflow:auto;background:#fff}
-table{width:100%;border-collapse:collapse;font-size:14px}
-thead{background:#f8fafc}
-th,td{padding:12px 12px;text-align:left;border-top:1px solid #eef2f7}
-th{border-top:none;font-size:12px;color:#475569;text-transform:uppercase}
-.kpi-list{display:grid;gap:10px;margin-top:14px}
-.kpi-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:10px 12px;background:#fff}
+.field label{font-size:12px;font-weight:800;color:#475569}
+.check{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff;font-size:14px;font-weight:700;color:#475569}
+.check input{width:auto}
+.actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
 .note-box{margin-top:16px;padding:14px;border-radius:16px;background:#f8fafc;border:1px solid var(--line);color:var(--muted);font-size:13px;line-height:1.6}
-.badge{display:inline-block;padding:6px 10px;border-radius:999px;background:#eef2f7;font-size:12px}
-.actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-.status-ok{background:#ecfdf5;border:1px solid #bbf7d0;color:#166534}
-.status-warn{background:#fffbeb;border:1px solid #fde68a;color:#92400e}
+.note-box b{color:#334155}
+.xml-box{margin-top:14px;padding:14px;border-radius:16px;background:#eef6ff;border:1px dashed #93c5fd;color:#1e3a8a;font-size:13px;line-height:1.55}
+.xml-box input{margin-top:8px;background:#fff}
+.table-title{margin-top:18px;font-size:18px;font-weight:900}
+.table-wrap{margin-top:10px;border:1px solid var(--line);border-radius:18px;overflow:auto;background:#fff}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:760px}
+thead{background:#f8fafc}
+th,td{padding:12px;text-align:left;border-top:1px solid #eef2f7;vertical-align:top}
+th{border-top:none;font-size:12px;color:#475569;text-transform:uppercase;white-space:nowrap}
+.badge{display:inline-block;padding:6px 10px;border-radius:999px;background:#eef2f7;font-size:12px;font-weight:800}
+.badge.good{background:#ecfdf5;color:#166534}
+.badge.warn{background:#fffbeb;color:#92400e}
+.badge.bad{background:#fff1f2;color:#9f1239}
+.empty{padding:24px;text-align:center;color:#64748b}
+.danger-text{color:#be123c}
+.good-text{color:#047857}
+.code{
+  display:block;width:100%;white-space:pre-wrap;word-break:break-word;background:#0f172a;color:#e2e8f0;border-radius:16px;padding:14px;line-height:1.45;font-size:12px;max-height:320px;overflow:auto;
+}
+
+.login-card{max-width:820px;margin:0 auto}
+.login-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+.login-badge{display:inline-block;margin-top:8px;padding:7px 10px;border-radius:999px;background:#eef6ff;color:#0b3a70;font-size:12px;font-weight:900}
+@media (max-width:760px){.login-grid{grid-template-columns:1fr}}
 @media (max-width:1000px){
-  .layout,.metrics,.grid-2,.grid-3{grid-template-columns:1fr}
+  .metrics,.grid-2,.grid-3{grid-template-columns:1fr}
+  .metric .v{font-size:24px}
 }
 </style>
 </head>
 <body>
 <div class="wrap">
   <div class="top">
-    <h1>Panel simple de control Seyalab</h1>
-    <p>Sencillo de llenar, rápido de revisar y ahora con importación de inventario mejorada.</p>
-    <div class="role-row" id="roleRow"></div>
+    <div class="top-row">
+      <div>
+        <h1>SotoMed Control</h1>
+        <p>Administración simple: facturas, XML CFDI, IVA, ISR, cobranza, PPD, abonos, servicios y pedidos de vendedores.</p>
+      </div>
+      <div class="status-pill" id="connectionStatus"><span class="status-dot"></span> Modo local</div>
+    </div>
+    <div class="tabs" id="tabs"></div>
   </div>
 
-  <div class="layout">
-    <div class="sidebar">
-      <h3 id="roleName">Perfil</h3>
-      <p id="roleDesc">Selecciona un perfil.</p>
-      <div class="tabs" id="tabs"></div>
-    </div>
-    <div class="panel" id="main"></div>
-  </div>
+  <div class="panel" id="main"></div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-const SUPABASE_URL = 'https://miztzgfcglvqvvjjtcyv.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_Nei-DTUW7PhVnrKHYHCM8g_9aWq7rvb';
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+/*
+  SotoMed Control V1.5 Pedidos vendedores
+  - Funciona en modo local con localStorage.
+  - Lee XML CFDI para llenar facturas emitidas y recibidas.
+  - Para usar Supabase: pega URL y Publishable/Anon Key en Configuración y ejecuta el SQL incluido en el archivo sotomed_supabase.sql.
+  - Esta V1 es control interno; valida impuestos finales con tu contador.
+*/
 
-const STORAGE_KEY = 'seyalab_simple_inventario_v2';
-
-const roles = {
-  director: { label:'Director', desc:'Solo ve el resumen.', tabs:['dashboard'] },
-  administrador: { label:'Administrador', desc:'Administra inventario, configuraciones y movimientos.', tabs:['dashboard','pedidos','configurar','inventario','compras','almacen','ventas','cobranza'] },
-  almacen: { label:'Almacén', desc:'Revisa pedidos y registra movimientos de almacén.', tabs:['pedidos','almacen'] },
-  ventas: { label:'Ventas', desc:'Registra seguimiento comercial y cobranza.', tabs:['ventas','cobranza'] }
+const TABLES = {
+  issued:'sotomed_issued_invoices',
+  received:'sotomed_received_invoices',
+  services:'sotomed_service_sheets',
+  payments:'sotomed_invoice_payments',
+  orders:'sotomed_orders'
 };
 
-function hoy(){ return new Date().toISOString().slice(0,10); }
-function copiar(v){ return JSON.parse(JSON.stringify(v)); }
-function dinero(n){ return '$' + Number(n||0).toLocaleString('en-US'); }
-function esCerrada(status){ return String(status || '').toLowerCase() === 'cerrada' || String(status || '').toLowerCase() === 'ganada'; }
-function pct(a,b){ if(!b) return 0; return Math.round((a/b)*100); }
-function diasVencido(fecha){
-  const a = new Date(fecha), b = new Date(hoy());
-  a.setHours(0,0,0,0); b.setHours(0,0,0,0);
-  return Math.floor((b-a)/86400000);
-}
-function estado(v, bueno=90, medio=75){
-  if(v >= bueno) return 'good';
-  if(v >= medio) return 'warn';
-  return 'bad';
-}
-function limpiarClave(k){
-  return String(k || '')
-    .trim()
-    .toLowerCase()
-    .replaceAll('á','a').replaceAll('é','e').replaceAll('í','i').replaceAll('ó','o').replaceAll('ú','u')
-    .replaceAll(' ', '_');
-}
+const STORAGE_KEY = 'sotomed_control_v1';
+const SESSION_KEY = 'sotomed_control_session_v1';
+
+// Claves simples de esta V1.5. Cambia estos valores si el cliente quiere otras claves.
+const ADMIN_PASSWORD = '9wkmry1d';
+const SELLER_PASSWORD = 'pedidos123';
+
+const ADMIN_TABS = [
+  ['dashboard','Dashboard'],
+  ['issued','Emitidas'],
+  ['collections','Cobranza'],
+  ['received','Recibidas'],
+  ['services','Servicios'],
+  ['orders','Pedidos'],
+  ['settings','Configuración']
+];
+
+const SELLER_TABS = [
+  ['orders','Pedidos']
+];
 
 const seed = {
-  inventory: [
-    {id:1,code:'REA-001',product:'Reactivo A',category:'Reactivos',location:'Rack A',initialQty:10,min:5,max:20,provider:'Proveedor A'},
-    {id:2,code:'CON-001',product:'Control Hematología',category:'Controles',location:'Rack B',initialQty:8,min:2,max:10,provider:'Proveedor B'}
-  ],
-  warehouseEntries: [
-    {id:1,date:hoy(),supplier:'Proveedor A',product:'Reactivo A',qty:10,sameDay:true}
-  ],
-  warehouseOutputs: [
-    {id:1,date:hoy(),area:'Ventas',product:'Reactivo A',qty:2,doubleCheck:true}
-  ],
-  counts: [
-    {id:1,date:hoy(),zone:'Rack A',systemQty:10,physicalQty:10,corrected24h:true}
-  ],
-  sales: [
-    {id:1,date:hoy(),client:'Laboratorio Vida',type:'Venta',amount:85000,status:'Ganada',followUp48h:true},
-    {id:2,date:hoy(),client:'Clínica Central',type:'Cotización',amount:42000,status:'Seguimiento',followUp48h:true}
-  ],
-  collections: [
-    {id:1,invoice:'FAC-001',client:'Laboratorio Vida',amount:85000,dueDate:hoy(),status:'Pendiente',paid:false,contactedBeforeDue:true}
-  ],
-  orders: [],
-  orderDraft: { date:hoy(), client:'', notes:'', items:[] },
-  dashboard: {
-    visible:['salesAmount','conversion','entriesSameDay','overduePct','itemsCount','criticalItems'],
-    notes:[]
-  },
-  purchaseCalc: {
-    productId:'',
-    monthlyDemand:'',
-    leadDays:'',
-    safetyDays:'',
-    reviewDays:'',
-    result:null
-  },
-  inventorySearch: '',
-  importInfo: null
+  activeTab:'dashboard',
+  month: new Date().toISOString().slice(0,7),
+  ivaRate:16,
+  isrRate:10,
+  supabaseUrl:'https://miztzgfcglvqvvjjtcyv.supabase.co',
+  supabaseKey:'sb_publishable_Nei-DTUW7PhVnrKHYHCM8g_9aWq7rvb',
+  issued:[],
+  received:[],
+  services:[],
+  payments:[],
+  orders:[]
 };
 
-const ADMIN_PASSWORD = '9wkmry1d';
-let state = cargar();
-let session = { role:'director', tab:'dashboard' };
+let state = loadState();
+let session = loadSession();
+let supabaseClient = null;
+let autoSyncHandle = null;
+let lastAutoSyncAt = '';
+const AUTO_SYNC_MS = 5000;
 
-let syncPollingHandle = null;
-
-function tabNecesitaPedidos(tab){
-  return tab === 'pedidos' || tab === 'dashboard';
-}
-
-function tabNecesitaAlmacen(tab){
-  return tab === 'pedidos' || tab === 'dashboard';
-}
-
-function tabNecesitaVentas(tab){
-  return tab === 'ventas' || tab === 'dashboard';
-}
-
-function tabNecesitaCobranza(tab){
-  return tab === 'cobranza' || tab === 'dashboard';
-}
-
-function tabCargaAlmacen(tab){
-  return tab === 'inventario' || tab === 'almacen' || tab === 'compras' || tab === 'pedidos' || tab === 'dashboard';
-}
-
-function usuarioEditandoFormulario(){
-  const el = document.activeElement;
-  if(!el) return false;
-  const tag = (el.tagName || '').toLowerCase();
-  return tag === 'input' || tag === 'textarea' || tag === 'select';
-}
-
-function iniciarAutoSync(){
-  detenerAutoSync();
-  syncPollingHandle = setInterval(async () => {
-    const shouldRender = !usuarioEditandoFormulario();
-    if(tabNecesitaPedidos(session.tab)){
-      await cargarPedidosSupabase(shouldRender);
-    }
-    if(tabNecesitaAlmacen(session.tab)){
-      await cargarAlmacenSupabase(shouldRender);
-    }
-    if(tabNecesitaVentas(session.tab)){
-      await cargarVentasSupabase(shouldRender);
-    }
-    if(tabNecesitaCobranza(session.tab)){
-      await cargarCobranzaSupabase(shouldRender);
-    }
-  }, 3000);
-}
-
-function detenerAutoSync(){
-  if(syncPollingHandle){
-    clearInterval(syncPollingHandle);
-    syncPollingHandle = null;
-  }
-}
-
-cargarPedidosSupabase();
-cargarAlmacenSupabase();
-cargarVentasSupabase();
-cargarCobranzaSupabase();
-iniciarAutoSync();
-
-window.addEventListener('focus', async () => {
-  const shouldRender = !usuarioEditandoFormulario();
-  await cargarPedidosSupabase(shouldRender);
-  await cargarAlmacenSupabase(shouldRender);
-  await cargarVentasSupabase(shouldRender);
-  await cargarCobranzaSupabase(shouldRender);
-});
-
-function cargar(){
+function loadState(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    if(!raw) return copiar(seed);
+    if(!raw) return {...seed};
     const parsed = JSON.parse(raw);
-    return {
-      ...copiar(seed),
-      ...parsed,
-      dashboard: { ...copiar(seed).dashboard, ...(parsed.dashboard || {}) },
-      purchaseCalc: { ...copiar(seed).purchaseCalc, ...(parsed.purchaseCalc || {}) },
-      orderDraft: { ...copiar(seed).orderDraft, ...(parsed.orderDraft || {}) },
-      inventory: Array.isArray(parsed.inventory) ? parsed.inventory : copiar(seed).inventory,
-      warehouseEntries: Array.isArray(parsed.warehouseEntries) ? parsed.warehouseEntries : copiar(seed).warehouseEntries,
-      warehouseOutputs: Array.isArray(parsed.warehouseOutputs) ? parsed.warehouseOutputs : copiar(seed).warehouseOutputs,
-      counts: Array.isArray(parsed.counts) ? parsed.counts : copiar(seed).counts,
-      sales: Array.isArray(parsed.sales) ? parsed.sales : copiar(seed).sales,
-      collections: Array.isArray(parsed.collections) ? parsed.collections : copiar(seed).collections,
-      orders: Array.isArray(parsed.orders) ? parsed.orders : [],
+    return {...seed, ...parsed,
+      supabaseUrl: parsed.supabaseUrl || seed.supabaseUrl,
+      supabaseKey: parsed.supabaseKey || seed.supabaseKey,
+      issued:Array.isArray(parsed.issued)?parsed.issued:[],
+      received:Array.isArray(parsed.received)?parsed.received:[],
+      services:Array.isArray(parsed.services)?parsed.services:[],
+      payments:Array.isArray(parsed.payments)?parsed.payments:[],
+      orders:Array.isArray(parsed.orders)?parsed.orders:[]
     };
-  }catch(e){
-    return copiar(seed);
+  }catch(err){
+    return {...seed};
   }
 }
-function guardar(){
+
+function saveState(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-function inventarioConStock(){
-  const entradas = state.warehouseEntries || [];
-  const salidas = state.warehouseOutputs || [];
-  return (state.inventory || []).map(item => {
-    const itemName = String(item.product || '').trim().toLowerCase();
-    const itemId = String(item.id);
-
-    const extra = entradas
-      .filter(x => {
-        const sameId = x.productId && String(x.productId) === itemId;
-        const sameName = String(x.product || '').trim().toLowerCase() === itemName;
-        return sameId || sameName;
-      })
-      .reduce((a,b)=>a+Number(b.qty||0),0);
-
-    const resta = salidas
-      .filter(x => {
-        const sameId = x.productId && String(x.productId) === itemId;
-        const sameName = String(x.product || '').trim().toLowerCase() === itemName;
-        return sameId || sameName;
-      })
-      .reduce((a,b)=>a+Number(b.qty||0),0);
-
-    const stock = Number(item.initialQty||0) + extra - resta;
-    const critical = stock <= Number(item.min||0);
-    return {...item, stock, critical};
-  });
-}
-
-
-function stockDisponible(productId){
-  const inv = inventarioConStock();
-  const item = inv.find(x => String(x.id) === String(productId));
-  return item ? Number(item.stock || 0) : 0;
-}
-
-function nombreProducto(productId){
-  const item = (state.inventory || []).find(x => String(x.id) === String(productId));
-  return item ? item.product : '';
-}
-
-function siguienteFolioPedido(){
-  const list = state.orders || [];
-  return 'PED-' + String(list.length + 1).padStart(3,'0');
-}
-
-
-function serializarPedidoNotes(texto, items){
-  return JSON.stringify({
-    text: texto || '',
-    items: Array.isArray(items) ? items : []
-  });
-}
-
-function deserializarPedidoNotes(notes){
+function loadSession(){
   try{
-    const parsed = JSON.parse(notes || '{}');
-    return {
-      text: parsed.text || '',
-      items: Array.isArray(parsed.items) ? parsed.items : []
-    };
+    return JSON.parse(sessionStorage.getItem(SESSION_KEY)) || {role:''};
   }catch(err){
-    return {
-      text: notes || '',
-      items: []
-    };
+    return {role:''};
   }
 }
 
-async function cargarPedidosSupabase(shouldRender = true){
-  try{
-    const { data, error } = await supabaseClient
-      .from('orders')
-      .select('*')
-      .order('id', { ascending: false });
+function saveSession(){
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
 
-    if(error){
-      console.error('Error cargando pedidos desde Supabase:', error);
-      return;
-    }
+function logout(){
+  session = {role:''};
+  sessionStorage.removeItem(SESSION_KEY);
+  render();
+}
 
-    state.orders = (data || []).map(row => {
-      const parsed = deserializarPedidoNotes(row.notes);
-      return {
-        id: row.id,
-        folio: row.folio,
-        date: row.order_date,
-        client: row.client,
-        notes: parsed.text || '',
-        status: row.status || 'Pendiente almacén',
-        items: parsed.items || []
-      };
-    });
+function roleName(){
+  if(session.role === 'admin') return 'Administración';
+  if(session.role === 'seller') return 'Vendedor';
+  return 'Sin acceso';
+}
 
-    if(shouldRender && (session.tab === 'pedidos' || session.tab === 'dashboard')){
-      renderMain();
-    }
-  }catch(err){
-    console.error('Error general cargando pedidos:', err);
+function allowedTabs(){
+  return session.role === 'seller' ? SELLER_TABS : ADMIN_TABS;
+}
+
+function normalizeSupabaseUrl(url){
+  return String(url || '').trim().replace(/\/rest\/v1\/?$/,'').replace(/\/+$/,'');
+}
+
+function connectSupabase(){
+  state.supabaseUrl = normalizeSupabaseUrl(state.supabaseUrl);
+  if(state.supabaseUrl && state.supabaseKey && window.supabase){
+    supabaseClient = supabase.createClient(state.supabaseUrl, state.supabaseKey);
+  }else{
+    supabaseClient = null;
+  }
+  updateConnectionStatus();
+}
+
+function updateConnectionStatus(){
+  const el = document.getElementById('connectionStatus');
+  if(!el) return;
+  const role = session.role ? ' · ' + roleName() : '';
+  if(supabaseClient){
+    el.innerHTML = '<span class="status-dot ok"></span> Supabase activo · auto' + role;
+  }else{
+    el.innerHTML = '<span class="status-dot"></span> Modo local' + role;
   }
 }
 
-async function guardarPedidoSupabase(order){
-  const payload = {
-    folio: order.folio,
-    order_date: order.date,
-    client: order.client,
-    notes: serializarPedidoNotes(order.notes, order.items),
-    status: order.status || 'Pendiente almacén',
-    created_by: session.role,
-    invoiced: false
-  };
+function hoy(){ return new Date().toISOString().slice(0,10); }
+function uid(){ return 'local_' + Date.now() + '_' + Math.floor(Math.random()*10000); }
+function money(n){ return '$' + Number(n||0).toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function num(v){ return Number(String(v ?? '').replaceAll(',','')) || 0; }
+function esc(v){
+  return String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
+function monthFilter(row){ return String(row.date || '').slice(0,7) === state.month; }
+function sum(list,key){ return list.reduce((a,b)=>a+num(b[key]),0); }
+function calcIva(subtotal){ return +(num(subtotal) * (num(state.ivaRate)/100)).toFixed(2); }
+function calcTotal(subtotal, iva){ return +(num(subtotal) + num(iva)).toFixed(2); }
+function rowId(row){ return String(row?.id ?? ''); }
+function paymentsForInvoice(invoiceId){
+  const id = String(invoiceId || '');
+  return (state.payments || []).filter(p => String(p.invoiceId || p.invoice_id || '') === id);
+}
+function paidAmountForInvoice(inv){
+  const pays = paymentsForInvoice(inv.id);
+  if(pays.length) return sum(pays, 'amount');
+  return inv.paid ? num(inv.total) : 0;
+}
+function balanceForInvoice(inv){ return Math.max(num(inv.total) - paidAmountForInvoice(inv), 0); }
+function isInvoiceLiquidated(inv){ return balanceForInvoice(inv) <= 0.009; }
+function invoiceStatus(inv){
+  const paid = paidAmountForInvoice(inv);
+  const balance = balanceForInvoice(inv);
+  if(balance <= 0.009) return 'Liquidada';
+  if(paid > 0) return 'Parcial';
+  return 'Pendiente';
+}
+function complementPendingForInvoice(inv){
+  return paymentsForInvoice(inv.id).filter(p => !p.complementIssued).length;
+}
+function paymentMonthFilter(row){ return String(row.paymentDate || '').slice(0,7) === state.month; }
 
-  const { data, error } = await supabaseClient
-    .from('orders')
-    .insert(payload)
-    .select()
-    .single();
-
-  if(error) throw error;
-  return data;
+function metric(label,value,sub,status='blue'){
+  return `<div class="metric ${status}"><div class="l">${esc(label)}</div><div class="v">${esc(value)}</div><div class="s">${esc(sub)}</div></div>`;
 }
 
-async function actualizarPedidoSupabase(orderId, changes){
-  const payload = { ...changes };
+function getMonthly(){
+  const issued = state.issued.filter(monthFilter);
+  const received = state.received.filter(monthFilter);
+  const services = state.services.filter(monthFilter);
+  const paymentsMonth = (state.payments || []).filter(paymentMonthFilter);
 
-  if(Object.prototype.hasOwnProperty.call(changes, 'date')){
-    payload.order_date = changes.date;
-    delete payload.date;
-  }
+  const issuedSubtotal = sum(issued,'subtotal');
+  const issuedIva = sum(issued,'iva');
+  const issuedTotal = sum(issued,'total');
+  const receivedSubtotal = sum(received,'subtotal');
+  const receivedIva = sum(received,'iva');
+  const receivedTotal = sum(received,'total');
 
-  if(Object.prototype.hasOwnProperty.call(changes, 'notes') || Object.prototype.hasOwnProperty.call(changes, 'items')){
-    const current = (state.orders || []).find(x => Number(x.id) === Number(orderId)) || {};
-    payload.notes = serializarPedidoNotes(
-      Object.prototype.hasOwnProperty.call(changes, 'notes') ? changes.notes : current.notes,
-      Object.prototype.hasOwnProperty.call(changes, 'items') ? changes.items : current.items
-    );
-    delete payload.items;
-  }
+  const collected = sum(paymentsMonth,'amount') + sum(issued.filter(x => paymentsForInvoice(x.id).length === 0 && x.paid),'total');
+  const receivable = issued.reduce((acc, inv) => acc + balanceForInvoice(inv), 0);
+  const ppdInvoices = issued.filter(x => String(x.paymentMethod || 'PUE').toUpperCase() === 'PPD');
+  const ppdBalance = ppdInvoices.reduce((acc, inv) => acc + balanceForInvoice(inv), 0);
+  const partialInvoices = issued.filter(x => invoiceStatus(x) === 'Parcial');
+  const complementPending = issued.reduce((acc, inv) => acc + complementPendingForInvoice(inv), 0);
 
-  const { error } = await supabaseClient
-    .from('orders')
-    .update(payload)
-    .eq('id', orderId);
+  const paidExpenses = sum(received.filter(x=>x.paid),'total');
+  const payable = sum(received.filter(x=>!x.paid),'total');
 
-  if(error) throw error;
-}
-
-
-
-async function cargarAlmacenSupabase(shouldRender = true){
-  try{
-    const invRes = await supabaseClient
-      .from('inventory')
-      .select('*')
-      .order('id', { ascending: true });
-
-    if(invRes.error){
-      console.error('Error cargando inventario desde Supabase:', invRes.error);
-      return;
-    }
-
-    state.inventory = (invRes.data || []).map(row => ({
-      id: row.id,
-      code: row.code || '',
-      product: row.product || '',
-      category: row.category || '',
-      location: row.location || '',
-      initialQty: Number(row.initial_qty || 0),
-      min: Number(row.min_qty || 0),
-      max: Number(row.max_qty || 0),
-      provider: row.provider || ''
-    }));
-
-    const [entriesRes, outputsRes] = await Promise.all([
-      supabaseClient.from('warehouse_entries').select('*').order('id', { ascending: false }),
-      supabaseClient.from('warehouse_outputs').select('*').order('id', { ascending: false })
-    ]);
-
-    if(entriesRes.error){
-      console.error('Error cargando entradas desde Supabase:', entriesRes.error);
-    } else {
-      state.warehouseEntries = (entriesRes.data || []).map(row => {
-        const productRow = state.inventory.find(x => Number(x.id) === Number(row.product_id));
-        return {
-          id: row.id,
-          date: row.movement_date,
-          supplier: row.supplier || '',
-          productId: row.product_id ? String(row.product_id) : '',
-          product: productRow ? productRow.product : '',
-          qty: Number(row.qty || 0),
-          sameDay: !!row.same_day
-        };
-      });
-    }
-
-    if(outputsRes.error){
-      console.error('Error cargando salidas desde Supabase:', outputsRes.error);
-    } else {
-      state.warehouseOutputs = (outputsRes.data || []).map(row => {
-        const productRow = state.inventory.find(x => Number(x.id) === Number(row.product_id));
-        return {
-          id: row.id,
-          date: row.movement_date,
-          area: row.area || '',
-          reference: row.reference || '',
-          productId: row.product_id ? String(row.product_id) : '',
-          product: productRow ? productRow.product : '',
-          qty: Number(row.qty || 0),
-          doubleCheck: !!row.double_check
-        };
-      });
-    }
-
-    if(shouldRender && tabCargaAlmacen(session.tab)){
-      renderMain();
-    }
-  }catch(err){
-    console.error('Error general cargando almacén:', err);
-  }
-}
-
-async function insertarProductoSupabase(item){
-  const cleanCode = String(item.code || '').trim() || null;
-  const payload = {
-    code: cleanCode,
-    product: String(item.product || '').trim(),
-    category: item.category || null,
-    location: item.location || null,
-    initial_qty: Number(item.initialQty || 0),
-    min_qty: Number(item.min || 0),
-    max_qty: Number(item.max || 0),
-    provider: item.provider || null,
-    active: true
-  };
-
-  if(cleanCode){
-    const { data, error } = await supabaseClient
-      .from('inventory')
-      .upsert(payload, { onConflict: 'code' })
-      .select()
-      .single();
-    if(error) throw error;
-    return data;
-  }
-
-  const { data, error } = await supabaseClient
-    .from('inventory')
-    .insert(payload)
-    .select()
-    .single();
-  if(error) throw error;
-  return data;
-}
-
-async function actualizarProductoSupabase(id, changes){
-  const payload = {};
-  if(Object.prototype.hasOwnProperty.call(changes, 'code')) payload.code = changes.code || null;
-  if(Object.prototype.hasOwnProperty.call(changes, 'product')) payload.product = changes.product || '';
-  if(Object.prototype.hasOwnProperty.call(changes, 'category')) payload.category = changes.category || null;
-  if(Object.prototype.hasOwnProperty.call(changes, 'location')) payload.location = changes.location || null;
-  if(Object.prototype.hasOwnProperty.call(changes, 'initialQty')) payload.initial_qty = Number(changes.initialQty || 0);
-  if(Object.prototype.hasOwnProperty.call(changes, 'min')) payload.min_qty = Number(changes.min || 0);
-  if(Object.prototype.hasOwnProperty.call(changes, 'max')) payload.max_qty = Number(changes.max || 0);
-  if(Object.prototype.hasOwnProperty.call(changes, 'provider')) payload.provider = changes.provider || null;
-
-  const { error } = await supabaseClient
-    .from('inventory')
-    .update(payload)
-    .eq('id', id);
-  if(error) throw error;
-}
-
-async function borrarRegistroSupabase(tabla, id){
-  const { error } = await supabaseClient.from(tabla).delete().eq('id', id);
-  if(error) throw error;
-}
-
-async function registrarEntradaSupabase(entry){
-  const { error } = await supabaseClient.from('warehouse_entries').insert({
-    movement_date: entry.date,
-    supplier: entry.supplier || null,
-    product_id: entry.productId ? Number(entry.productId) : null,
-    qty: Number(entry.qty || 0),
-    same_day: !!entry.sameDay,
-    created_by: session.role
-  });
-  if(error) throw error;
-}
-
-async function registrarSalidaSupabase(output){
-  const { error } = await supabaseClient.from('warehouse_outputs').insert({
-    movement_date: output.date,
-    area: output.area || null,
-    reference: output.reference || null,
-    product_id: output.productId ? Number(output.productId) : null,
-    qty: Number(output.qty || 0),
-    double_check: !!output.doubleCheck,
-    created_by: session.role
-  });
-  if(error) throw error;
-}
-
-
-
-async function cargarVentasSupabase(shouldRender = true){
-  try{
-    const { data, error } = await supabaseClient
-      .from('sales')
-      .select('*')
-      .order('id', { ascending: false });
-
-    if(error){
-      console.error('Error cargando ventas desde Supabase:', error);
-      return;
-    }
-
-    state.sales = (data || []).map(row => ({
-      id: row.id,
-      date: row.sale_date,
-      client: row.client || '',
-      seller: row.seller || 'Vendedor 1',
-      contact: row.contact || '',
-      type: row.sale_type || '',
-      amount: Number(row.amount || 0),
-      status: row.status || 'Seguimiento',
-      nextFollowUp: row.next_follow_up || '',
-      priority: row.priority || '',
-      notes: row.notes || '',
-      followUp48h: !!row.follow_up_48h
-    }));
-
-    if(shouldRender && tabNecesitaVentas(session.tab)){
-      renderMain();
-    }
-  }catch(err){
-    console.error('Error general cargando ventas:', err);
-  }
-}
-
-async function guardarVentaSupabase(item){
-  const payload = {
-    sale_date: item.date || hoy(),
-    client: item.client || '',
-    seller: item.seller || 'Vendedor 1',
-    contact: item.contact || null,
-    sale_type: item.type || null,
-    amount: Number(item.amount || 0),
-    status: item.status || 'Seguimiento',
-    next_follow_up: item.nextFollowUp || null,
-    priority: item.priority || null,
-    notes: item.notes || null,
-    follow_up_48h: !!item.followUp48h
-  };
-
-  const { data, error } = await supabaseClient
-    .from('sales')
-    .insert(payload)
-    .select()
-    .single();
-
-  if(error) throw error;
-  return data;
-}
-
-
-
-async function cargarCobranzaSupabase(shouldRender = true){
-  try{
-    const { data, error } = await supabaseClient
-      .from('collections')
-      .select('*')
-      .order('id', { ascending: false });
-
-    if(error){
-      console.error('Error cargando cobranza desde Supabase:', error);
-      return;
-    }
-
-    state.collections = (data || []).map(row => ({
-      id: row.id,
-      invoice: row.invoice || '',
-      client: row.client || '',
-      amount: Number(row.amount || 0),
-      dueDate: row.due_date || '',
-      status: row.status || 'Pendiente',
-      paid: !!row.paid,
-      contactedBeforeDue: !!row.contacted_before_due
-    }));
-
-    if(shouldRender && tabNecesitaCobranza(session.tab)){
-      renderMain();
-    }
-  }catch(err){
-    console.error('Error general cargando cobranza:', err);
-  }
-}
-
-async function guardarCobranzaSupabase(item){
-  const payload = {
-    invoice: item.invoice || null,
-    client: item.client || '',
-    amount: Number(item.amount || 0),
-    due_date: item.dueDate || null,
-    status: item.status || 'Pendiente',
-    paid: !!item.paid,
-    contacted_before_due: !!item.contactedBeforeDue
-  };
-
-  const { data, error } = await supabaseClient
-    .from('collections')
-    .insert(payload)
-    .select()
-    .single();
-
-  if(error) throw error;
-  return data;
-}
-
-
-function metricas(){
-  const inv = inventarioConStock();
-  const cerradas = state.sales.filter(x => esCerrada(x.status));
-  const ventasMonto = cerradas.reduce((a,b)=>a+Number(b.amount||0),0);
-  const totalVentas = state.sales.length || 0;
-  const conversion = pct(cerradas.length, totalVentas || 1);
-
-  const entradasMismoDiaCount = state.warehouseEntries.filter(x=>x.sameDay).length;
-  const totalEntradas = state.warehouseEntries.length || 0;
-  const entradasDia = pct(entradasMismoDiaCount, totalEntradas || 1);
-
-  const abiertas = state.collections.filter(x=>!x.paid);
-  const vencidas = abiertas.filter(x=>diasVencido(x.dueDate)>0);
-  const vencidaPct = pct(vencidas.length, abiertas.length || 1);
+  const ivaToPay = issuedIva - receivedIva;
+  const estimatedProfit = collected - paidExpenses;
+  const estimatedIsr = Math.max(estimatedProfit,0) * (num(state.isrRate)/100);
+  const pendingServices = services.filter(x=>!x.invoiced);
+  const servicePendingAmount = sum(pendingServices,'amount');
 
   return {
-    salesAmount:{label:'Ventas del mes',value:dinero(ventasMonto),sub:`${cerradas.length} cerradas de ${totalVentas} registradas`,status:'good'},
-    conversion:{label:'Conversión',value:conversion+'%',sub:`${cerradas.length} cerradas / ${totalVentas} registradas`,status:estado(conversion,35,20)},
-    entriesSameDay:{label:'Entradas al día',value:entradasDia+'%',sub:`${entradasMismoDiaCount} de ${totalEntradas} registradas el mismo día`,status:estado(entradasDia,95,80)},
-    overduePct:{label:'Cobranza vencida',value:vencidaPct+'%',sub:`${vencidas.length} vencidas de ${abiertas.length} abiertas`,status:vencidaPct<=10?'good':vencidaPct<=25?'warn':'bad'},
-    itemsCount:{label:'Productos cargados',value:String(inv.length),sub:`${inv.length} productos en inventario maestro`,status:'good'},
-    criticalItems:{label:'Productos críticos',value:String(inv.filter(x=>x.critical).length),sub:`${inv.filter(x=>x.critical).length} con stock en mínimo o menos`,status:inv.filter(x=>x.critical).length>0?'warn':'good'}
+    issued, received, services, paymentsMonth,
+    issuedSubtotal, issuedIva, issuedTotal,
+    receivedSubtotal, receivedIva, receivedTotal,
+    collected, receivable, paidExpenses, payable,
+    ivaToPay, estimatedProfit, estimatedIsr,
+    pendingServices, servicePendingAmount,
+    ppdInvoices, ppdBalance, partialInvoices, complementPending
   };
+}
+
+async function loadRemote(showAlert = true){
+  if(!supabaseClient) return false;
+  try{
+    const [i,r,s,pay,o] = await Promise.all([
+      supabaseClient.from(TABLES.issued).select('*').order('invoice_date', {ascending:false}),
+      supabaseClient.from(TABLES.received).select('*').order('invoice_date', {ascending:false}),
+      supabaseClient.from(TABLES.services).select('*').order('service_date', {ascending:false}),
+      supabaseClient.from(TABLES.payments).select('*').order('payment_date', {ascending:false}),
+      supabaseClient.from(TABLES.orders).select('*').order('order_date', {ascending:false})
+    ]);
+
+    if(i.error || r.error || s.error || pay.error || o.error){
+      if(showAlert) alert('No pude cargar Supabase. Revisa que ya ejecutaste el SQL V1.5 y que la URL/Key sean correctas.');
+      console.error(i.error || r.error || s.error || pay.error || o.error);
+      return false;
+    }
+
+    state.issued = (i.data || []).map(row => ({
+      id:row.id, date:row.invoice_date, client:row.client || '', invoiceNumber:row.invoice_number || '',
+      subtotal:num(row.subtotal), iva:num(row.iva), total:num(row.total), paid:!!row.paid,
+      paymentDate:row.payment_date || '', notes:row.notes || '',
+      paymentMethod:row.payment_method || 'PUE', dueDate:row.due_date || ''
+    }));
+
+    state.received = (r.data || []).map(row => ({
+      id:row.id, date:row.invoice_date, provider:row.provider || '', invoiceNumber:row.invoice_number || '',
+      subtotal:num(row.subtotal), iva:num(row.iva), total:num(row.total), paid:!!row.paid,
+      paymentDate:row.payment_date || '', notes:row.notes || ''
+    }));
+
+    state.services = (s.data || []).map(row => ({
+      id:row.id, date:row.service_date, client:row.client || '', serviceNumber:row.service_number || '',
+      equipment:row.equipment || '', work:row.work_done || '', amount:num(row.amount),
+      invoiced:!!row.invoiced, invoiceNumber:row.invoice_number || ''
+    }));
+
+    state.payments = (pay.data || []).map(row => ({
+      id:row.id, invoiceId:row.invoice_id, paymentDate:row.payment_date, amount:num(row.amount),
+      paymentMethod:row.payment_method || '', complementIssued:!!row.complement_issued,
+      complementDate:row.complement_date || '', notes:row.notes || ''
+    }));
+
+    state.orders = (o.data || []).map(row => ({
+      id:row.id, date:row.order_date, seller:row.seller || '', client:row.client || '',
+      product:row.product || '', qty:num(row.qty), notes:row.notes || '', status:row.status || 'Pendiente almacén'
+    }));
+
+    // Recalcula estado de pagada según abonos reales.
+    state.issued = state.issued.map(inv => ({...inv, paid:isInvoiceLiquidated(inv)}));
+
+    saveState();
+    return true;
+  }catch(err){
+    console.error(err);
+    if(showAlert) alert('Error general al cargar Supabase.');
+    return false;
+  }
+}
+
+
+function userIsEditing(){
+  const el = document.activeElement;
+  if(!el) return false;
+  const tag = String(el.tagName || '').toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select';
+}
+
+async function autoRefresh(){
+  if(!supabaseClient || document.hidden || userIsEditing()) return;
+  const ok = await loadRemote(false);
+  if(ok){
+    lastAutoSyncAt = new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    render();
+  }
+}
+
+function startAutoSync(){
+  if(autoSyncHandle) clearInterval(autoSyncHandle);
+  autoSyncHandle = setInterval(autoRefresh, AUTO_SYNC_MS);
+}
+
+window.addEventListener('focus', () => autoRefresh());
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden) autoRefresh();
+});
+
+async function insertRemote(type,item){
+  if(!supabaseClient) return null;
+  let payload = {};
+  if(type === 'issued'){
+    payload = {
+      invoice_date:item.date, client:item.client, invoice_number:item.invoiceNumber,
+      subtotal:num(item.subtotal), iva:num(item.iva), total:num(item.total),
+      paid:!!item.paid, payment_date:item.paymentDate || null, notes:item.notes || null,
+      payment_method:item.paymentMethod || 'PUE', due_date:item.dueDate || null
+    };
+  }
+  if(type === 'received'){
+    payload = {
+      invoice_date:item.date, provider:item.provider, invoice_number:item.invoiceNumber,
+      subtotal:num(item.subtotal), iva:num(item.iva), total:num(item.total),
+      paid:!!item.paid, payment_date:item.paymentDate || null, notes:item.notes || null
+    };
+  }
+  if(type === 'services'){
+    payload = {
+      service_date:item.date, client:item.client, service_number:item.serviceNumber,
+      equipment:item.equipment, work_done:item.work, amount:num(item.amount),
+      invoiced:!!item.invoiced, invoice_number:item.invoiceNumber || null
+    };
+  }
+  if(type === 'payments'){
+    payload = {
+      invoice_id:Number(item.invoiceId), payment_date:item.paymentDate || hoy(), amount:num(item.amount),
+      payment_method:item.paymentMethod || null, complement_issued:!!item.complementIssued,
+      complement_date:item.complementDate || null, notes:item.notes || null
+    };
+  }
+  if(type === 'orders'){
+    payload = {
+      order_date:item.date || hoy(), seller:item.seller || null, client:item.client || '',
+      product:item.product || '', qty:num(item.qty), notes:item.notes || null,
+      status:item.status || 'Pendiente almacén'
+    };
+  }
+  const {data,error} = await supabaseClient.from(TABLES[type]).insert(payload).select().single();
+  if(error) throw error;
+  return data;
+}
+
+async function updateRemote(type,id,changes){
+  if(!supabaseClient) return;
+  let payload = {};
+  if(type === 'issued' || type === 'received'){
+    if('paid' in changes) payload.paid = !!changes.paid;
+    if('paymentDate' in changes) payload.payment_date = changes.paymentDate || null;
+    if('paymentMethod' in changes) payload.payment_method = changes.paymentMethod || 'PUE';
+    if('dueDate' in changes) payload.due_date = changes.dueDate || null;
+  }
+  if(type === 'services'){
+    if('invoiced' in changes) payload.invoiced = !!changes.invoiced;
+    if('invoiceNumber' in changes) payload.invoice_number = changes.invoiceNumber || null;
+  }
+  if(type === 'payments'){
+    if('complementIssued' in changes) payload.complement_issued = !!changes.complementIssued;
+    if('complementDate' in changes) payload.complement_date = changes.complementDate || null;
+    if('amount' in changes) payload.amount = num(changes.amount);
+    if('paymentDate' in changes) payload.payment_date = changes.paymentDate || hoy();
+  }
+  if(type === 'orders'){
+    if('status' in changes) payload.status = changes.status || 'Pendiente almacén';
+    if('notes' in changes) payload.notes = changes.notes || null;
+  }
+  const {error} = await supabaseClient.from(TABLES[type]).update(payload).eq('id', id);
+  if(error) throw error;
+}
+
+async function deleteRemote(type,id){
+  if(!supabaseClient) return;
+  const {error} = await supabaseClient.from(TABLES[type]).delete().eq('id', id);
+  if(error) throw error;
+}
+
+
+function findFirstByLocalName(root, localName){
+  return Array.from(root.getElementsByTagName('*')).find(el => el.localName === localName) || null;
+}
+
+function findChildrenByLocalName(el, localName){
+  if(!el) return [];
+  return Array.from(el.children || []).filter(child => child.localName === localName);
+}
+
+function attr(el, name){
+  if(!el) return '';
+  return el.getAttribute(name) || el.getAttribute(name.toLowerCase()) || el.getAttribute(name.toUpperCase()) || '';
+}
+
+function parseCfdiXml(xmlText){
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  const parserError = doc.getElementsByTagName('parsererror')[0];
+  if(parserError){
+    throw new Error('El archivo no parece ser un XML válido.');
+  }
+
+  const comprobante = doc.documentElement && doc.documentElement.localName === 'Comprobante'
+    ? doc.documentElement
+    : findFirstByLocalName(doc, 'Comprobante');
+
+  if(!comprobante){
+    throw new Error('No encontré el nodo Comprobante del CFDI.');
+  }
+
+  const emisor = findFirstByLocalName(doc, 'Emisor');
+  const receptor = findFirstByLocalName(doc, 'Receptor');
+  const timbre = findFirstByLocalName(doc, 'TimbreFiscalDigital');
+
+  const serie = attr(comprobante, 'Serie');
+  const folio = attr(comprobante, 'Folio');
+  const uuidFiscal = attr(timbre, 'UUID');
+  const invoiceNumber = [serie, folio].filter(Boolean).join('-') || folio || serie || uuidFiscal || '';
+
+  const subtotal = num(attr(comprobante, 'SubTotal'));
+  const total = num(attr(comprobante, 'Total'));
+
+  let iva = 0;
+  const comprobanteImpuestos = findChildrenByLocalName(comprobante, 'Impuestos')[0];
+  const totalTrasladados = num(attr(comprobanteImpuestos, 'TotalImpuestosTrasladados'));
+  if(totalTrasladados){
+    iva = totalTrasladados;
+  }else{
+    const traslados = Array.from(doc.getElementsByTagName('*')).filter(el => el.localName === 'Traslado');
+    iva = traslados
+      .filter(el => attr(el, 'Impuesto') === '002')
+      .reduce((acc, el) => acc + num(attr(el, 'Importe')), 0);
+  }
+  if(!iva && total && subtotal && total >= subtotal){
+    iva = +(total - subtotal).toFixed(2);
+  }
+
+  return {
+    date: String(attr(comprobante, 'Fecha') || '').slice(0,10) || hoy(),
+    invoiceNumber,
+    subtotal,
+    iva:+iva.toFixed(2),
+    total,
+    uuid: uuidFiscal,
+    paymentMethod: attr(comprobante, 'MetodoPago') || 'PUE',
+    emisorName: attr(emisor, 'Nombre') || attr(emisor, 'Rfc') || '',
+    emisorRfc: attr(emisor, 'Rfc') || '',
+    receptorName: attr(receptor, 'Nombre') || attr(receptor, 'Rfc') || '',
+    receptorRfc: attr(receptor, 'Rfc') || ''
+  };
+}
+
+function xmlNotes(data, fileName){
+  const pieces = [];
+  if(data.uuid) pieces.push('UUID: ' + data.uuid);
+  if(data.paymentMethod) pieces.push('Método pago: ' + data.paymentMethod);
+  if(data.emisorRfc) pieces.push('Emisor RFC: ' + data.emisorRfc);
+  if(data.receptorRfc) pieces.push('Receptor RFC: ' + data.receptorRfc);
+  if(fileName) pieces.push('Archivo XML: ' + fileName);
+  return pieces.join(' | ');
+}
+
+function fillInvoiceFromXml(type, data, fileName){
+  const form = document.getElementById(type + 'Form');
+  if(!form) return;
+
+  form.elements.date.value = data.date || hoy();
+  form.elements.invoiceNumber.value = data.invoiceNumber || '';
+  form.elements.subtotal.value = data.subtotal || 0;
+  form.elements.iva.value = data.iva || 0;
+  form.elements.total.value = data.total || calcTotal(data.subtotal, data.iva);
+  if(form.elements.paymentMethod){
+    const method = String(data.paymentMethod || 'PUE').toUpperCase();
+    form.elements.paymentMethod.value = method === 'PPD' ? 'PPD' : 'PUE';
+  }
+
+  if(type === 'issued'){
+    form.elements.client.value = data.receptorName || '';
+  }else{
+    form.elements.provider.value = data.emisorName || '';
+  }
+
+  const notesInput = document.getElementById(type + 'XmlNotes');
+  if(notesInput) notesInput.value = xmlNotes(data, fileName);
+
+  const preview = document.getElementById(type + 'XmlPreview');
+  if(preview){
+    const nombre = type === 'issued' ? data.receptorName : data.emisorName;
+    preview.innerHTML = `
+      <b>XML leído correctamente.</b><br>
+      Nombre: ${esc(nombre || 'Sin nombre')}<br>
+      Factura: ${esc(data.invoiceNumber || 'Sin folio')}<br>
+      Subtotal: ${money(data.subtotal)} · IVA: ${money(data.iva)} · Total: ${money(data.total)}<br>
+      ${data.uuid ? 'UUID: ' + esc(data.uuid) : 'UUID no encontrado'}<br><br>
+      Revisa los datos y presiona <b>Guardar</b>.
+    `;
+  }
+}
+
+function attachXmlImport(type){
+  const input = document.getElementById(type + 'XmlFile');
+  if(!input) return;
+  input.addEventListener('change', async e => {
+    const file = e.target.files && e.target.files[0];
+    if(!file) return;
+    try{
+      const xmlText = await file.text();
+      const data = parseCfdiXml(xmlText);
+      fillInvoiceFromXml(type, data, file.name);
+    }catch(err){
+      console.error(err);
+      alert(err.message || 'No pude leer el XML.');
+    }
+  });
 }
 
 function render(){
-  renderRoles();
-  renderTabs();
-  renderMain();
-}
-
-function renderRoles(){
-  const row = document.getElementById('roleRow');
-  row.innerHTML = Object.entries(roles).map(([key,role]) =>
-    `<button class="role-btn ${session.role===key?'active':''}" data-role="${key}">${role.label}</button>`
-  ).join('');
-  row.querySelectorAll('[data-role]').forEach(btn=>{
-    btn.onclick = () => {
-      const nextRole = btn.dataset.role;
-      if(nextRole === 'administrador' && session.role !== 'administrador'){
-        const pass = window.prompt('Contraseña de administrador:');
-        if(pass === null){
-          return;
-        }
-        if(String(pass).trim() !== ADMIN_PASSWORD){
-          alert('Contraseña incorrecta.');
-          return;
-        }
-      }
-      session.role = nextRole;
-      session.tab = roles[session.role].tabs[0];
-      render();
-    };
-  });
-}
-
-function renderTabs(){
-  const role = roles[session.role];
-  document.getElementById('roleName').textContent = role.label;
-  document.getElementById('roleDesc').textContent = role.desc;
-  const tabs = document.getElementById('tabs');
-  tabs.innerHTML = role.tabs.map(tab =>
-    `<button class="tab-btn ${session.tab===tab?'active':''}" data-tab="${tab}">${tab.charAt(0).toUpperCase()+tab.slice(1)}</button>`
-  ).join('');
-  tabs.querySelectorAll('[data-tab]').forEach(btn=>{
-    btn.onclick = async () => {
-      session.tab = btn.dataset.tab;
-      if(tabNecesitaPedidos(session.tab)){
-        await cargarPedidosSupabase(false);
-      }
-      if(tabCargaAlmacen(session.tab)){
-        await cargarAlmacenSupabase(false);
-      }
-      if(tabNecesitaVentas(session.tab)){
-        await cargarVentasSupabase(false);
-      }
-      if(tabNecesitaCobranza(session.tab)){
-        await cargarCobranzaSupabase(false);
-      }
-      renderMain();
-      renderTabs();
-    };
-  });
-}
-
-function cardMetric(m){
-  return `<div class="metric ${m.status}"><div class="l">${m.label}</div><div class="v">${m.value}</div><div class="s">${m.sub}</div></div>`;
-}
-
-function tabla(cols,rows){
-  return `
-    <div class="table-wrap">
-      <table>
-        <thead><tr>${cols.map(c=>`<th>${c.label}</th>`).join('')}</tr></thead>
-        <tbody>
-          ${rows.length===0 ? `<tr><td colspan="${cols.length}" style="text-align:center;color:#64748b">Sin datos</td></tr>` :
-            rows.map(r=>`<tr>${cols.map(c=>`<td>${c.render?c.render(r[c.key],r):(r[c.key]??'')}</td>`).join('')}</tr>`).join('')
-          }
-        </tbody>
-      </table>
-    </div>`;
-}
-
-function renderMain(){
+  updateConnectionStatus();
   const main = document.getElementById('main');
 
-  const adminOnlyTabs = ['configurar','inventario','compras'];
-  if(adminOnlyTabs.includes(session.tab) && session.role !== 'administrador'){
-    main.innerHTML = `
-      <div class="section-title">
-        <h2>Acceso restringido</h2>
-        <p>Esta sección solo está disponible para el administrador.</p>
-      </div>
-      <div class="note-box">
-        Para entrar a esta sección necesitas cambiar al perfil <b>Administrador</b> y escribir la contraseña correcta.
-      </div>`;
+  if(!session.role){
+    document.getElementById('tabs').innerHTML = '';
+    main.innerHTML = viewLogin();
+    attachLoginEvents();
     return;
   }
 
-  if(session.tab === 'dashboard') main.innerHTML = vistaDashboard();
-  if(session.tab === 'pedidos') main.innerHTML = vistaPedidos();
-  if(session.tab === 'configurar') main.innerHTML = vistaConfigurar();
-  if(session.tab === 'inventario') main.innerHTML = vistaInventario();
-  if(session.tab === 'compras') main.innerHTML = vistaCompras();
-  if(session.tab === 'almacen') main.innerHTML = vistaAlmacen();
-  if(session.tab === 'ventas') main.innerHTML = vistaVentas();
-  if(session.tab === 'cobranza') main.innerHTML = vistaCobranza();
+  const allowed = allowedTabs().map(x => x[0]);
+  if(!allowed.includes(state.activeTab)){
+    state.activeTab = allowed[0];
+    saveState();
+  }
+
+  renderTabs();
+  if(state.activeTab === 'dashboard') main.innerHTML = viewDashboard();
+  if(state.activeTab === 'issued') main.innerHTML = viewIssued();
+  if(state.activeTab === 'collections') main.innerHTML = viewCollections();
+  if(state.activeTab === 'received') main.innerHTML = viewReceived();
+  if(state.activeTab === 'services') main.innerHTML = viewServices();
+  if(state.activeTab === 'orders') main.innerHTML = viewOrders();
+  if(state.activeTab === 'settings') main.innerHTML = viewSettings();
   attachEvents();
 }
 
-function vistaDashboard(){
-  const m = metricas();
-  const visibles = (state.dashboard.visible || []).map(id => m[id]).filter(Boolean);
-  const notes = state.dashboard.notes || [];
-  const inv = inventarioConStock();
-
-  const salesBase = state.sales || [];
-  const seller1 = salesBase.filter(x => (x.seller || '') === 'Vendedor 1');
-  const seller2 = salesBase.filter(x => (x.seller || '') === 'Vendedor 2');
-
-  const sellerClosedAmount = (list) => list.filter(x => esCerrada(x.status)).reduce((a,b)=>a+Number(b.amount||0),0);
-  const sellerClosedCount = (list) => list.filter(x => esCerrada(x.status)).length;
-  const sellerConversion = (list) => pct(sellerClosedCount(list), list.length || 1);
-
-  return `
-    <div class="section-title">
-      <h2>Dashboard</h2>
-      <p>Resumen rápido para dirección.</p>
-    </div>
-    <div class="metrics">
-      ${visibles.map(cardMetric).join('')}
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Vendedor 1</h3>
-          <p class="sub">Seguimiento separado por vendedor</p>
-          <div class="metrics" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
-            ${cardMetric({label:'Ventas cerradas',value:dinero(sellerClosedAmount(seller1)),sub:`${sellerClosedCount(seller1)} cerradas`,status:'good'})}
-            ${cardMetric({label:'Conversión',value:sellerConversion(seller1)+'%',sub:`${sellerClosedCount(seller1)} cerradas / ${seller1.length} registradas`,status:estado(sellerConversion(seller1),35,20)})}
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Vendedor 2</h3>
-          <p class="sub">Seguimiento separado por vendedor</p>
-          <div class="metrics" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
-            ${cardMetric({label:'Ventas cerradas',value:dinero(sellerClosedAmount(seller2)),sub:`${sellerClosedCount(seller2)} cerradas`,status:'good'})}
-            ${cardMetric({label:'Conversión',value:sellerConversion(seller2)+'%',sub:`${sellerClosedCount(seller2)} cerradas / ${seller2.length} registradas`,status:estado(sellerConversion(seller2),35,20)})}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    ${notes.length ? `
-      <div class="grid-2">
-        ${notes.map((n,i)=>`
-          <div class="card">
-            <div class="card" style="padding:16px;border:none;box-shadow:none">
-              <h3 style="font-size:18px">${n.title}</h3>
-              <p class="sub" style="margin-top:8px">${n.text}</p>
-            </div>
-          </div>`).join('')}
-      </div>` : ''}
-
-    <div class="grid-2">
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Inventario</h3>
-          <p class="sub">Lectura rápida del stock</p>
-          <div class="note-box">
-            <b>Total de productos:</b> ${inv.length}<br><br>
-            <b>Productos críticos:</b> ${inv.filter(x=>x.critical).length}<br><br>
-            <b>Stock total:</b> ${inv.reduce((a,b)=>a+Number(b.stock||0),0)}
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Alertas</h3>
-          <p class="sub">Lo más importante del momento</p>
-          <div class="note-box">
-            <b>Productos críticos:</b> ${inv.filter(x=>x.critical).map(x=>x.product).join(', ') || 'Ninguno'}<br><br>
-            <b>Facturas vencidas:</b> ${state.collections.filter(x=>!x.paid && diasVencido(x.dueDate)>0).length}<br><br>
-            <b>Oportunidades en seguimiento:</b> ${state.sales.filter(x=>x.status==='Seguimiento').length}
-          </div>
-        </div>
-      </div>
-    </div>`;
+function renderTabs(){
+  const el = document.getElementById('tabs');
+  el.innerHTML = allowedTabs().map(([id,label]) => `<button class="tab-btn ${state.activeTab===id?'active':''}" data-tab="${id}">${label}</button>`).join('') +
+    `<button class="tab-btn" id="logoutBtn" type="button">Salir · ${roleName()}</button>`;
+  el.querySelectorAll('[data-tab]').forEach(btn => {
+    btn.onclick = () => {
+      state.activeTab = btn.dataset.tab;
+      saveState();
+      render();
+    };
+  });
+  document.getElementById('logoutBtn')?.addEventListener('click', logout);
 }
 
-
-function vistaPedidos(){
-  const inv = inventarioConStock();
-  const draft = state.orderDraft || { date:hoy(), client:'', notes:'', items:[] };
-  const orders = state.orders || [];
-  const pendientes = orders.filter(x => x.status === 'Pendiente almacén').length;
-  const listos = orders.filter(x => x.status === 'Listo para surtir').length;
-  const empacados = orders.filter(x => x.status === 'Empacado').length;
-  const facturados = orders.filter(x => x.status === 'Facturado').length;
-
+function viewLogin(){
   return `
-    <div class="section-title">
-      <h2>Pedidos</h2>
-      <p>Aquí administración captura el pedido y almacén confirma si hay o no hay. Cuando almacén empaca, el stock baja automáticamente.</p>
-    </div>
-    <div class="actions-row">
-      <button class="ghost-btn" id="refreshOrdersBtn" type="button">Actualizar pedidos desde Supabase</button>
-    </div>
-
-    <div class="metrics">
-      ${cardMetric({label:'Pendientes almacén',value:String(pendientes),sub:'Esperando revisión',status:pendientes>0?'warn':'good'})}
-      ${cardMetric({label:'Listos para surtir',value:String(listos),sub:'Hay existencia suficiente',status:listos>0?'good':'good'})}
-      ${cardMetric({label:'Empacados',value:String(empacados),sub:'Listos para facturar',status:empacados>0?'good':'good'})}
-      ${cardMetric({label:'Facturados',value:String(facturados),sub:'Cerrados por administración',status:'good'})}
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Nuevo pedido</h3>
-          <p class="sub">Administración captura el pedido y lo manda al almacén. Puedes usar <b>Agregar partida</b> para varias líneas o guardar directo si solo será una.</p>
-          ${session.role === 'administrador' ? `
-          <form id="orderDraftForm" class="form">
-            <div class="field"><label>Fecha</label><input type="date" name="date" value="${draft.date || hoy()}"></div>
-            <div class="field"><label>Cliente</label><input name="client" value="${draft.client || ''}"></div>
-            <div class="field"><label>Observaciones</label><textarea name="notes" placeholder="Notas del pedido">${draft.notes || ''}</textarea></div>
-            <div class="field">
-              <label>Producto</label>
-              <select name="productId" id="draftProductId">
-                <option value="">Selecciona un producto</option>
-                ${inv.map(x => `<option value="${x.id}">${x.product} · stock ${x.stock}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field"><label>Cantidad solicitada</label><input type="number" name="qty" id="draftQty"></div>
-            <div class="actions-row">
-              <button class="ghost-btn" type="button" id="addOrderItemBtn">Agregar partida</button>
-              <button class="save-btn" type="submit">Guardar pedido</button>
-            </div>
-          </form>` : `
-          <div class="note-box">Solo administración crea pedidos. Almacén entra aquí para revisar disponibilidad y empacar.</div>`}
-
-          <div class="table-title">Partidas del pedido actual</div>
-          ${draft.items.length ? `
-            <div class="kpi-list">
-              ${draft.items.map((it,idx)=>`
-                <div class="kpi-row" style="grid-template-columns:1fr auto auto">
-                  <div>
-                    <div style="font-weight:800">${it.product}</div>
-                    <div style="margin-top:4px;color:#64748b;font-size:13px">Solicitado: ${it.qty} · Disponible: ${stockDisponible(it.productId)}</div>
-                  </div>
-                  <span class="badge">${stockDisponible(it.productId) >= Number(it.qty) ? 'OK' : 'Faltante'}</span>
-                  ${session.role === 'administrador' ? `<button class="danger-btn" data-del-draft-item="${idx}">Quitar</button>` : ''}
-                </div>
-              `).join('')}
-            </div>` : `<div class="note-box">Todavía no hay partidas en el pedido.</div>`}
+    <div class="login-card">
+      <div class="section-title">
+        <div>
+          <h2>Acceso SotoMed</h2>
+          <p>Entra como administración para ver todo, o como vendedor para capturar pedidos solamente.</p>
+          <span class="login-badge">V1.5 · acceso simple por clave</span>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Flujo</h3>
-          <p class="sub">Así queda conectado administración con almacén</p>
-          <div class="note-box">
-            <b>1.</b> Administración captura el pedido.<br><br>
-            <b>2.</b> Almacén revisa si hay existencia.<br><br>
-            <b>3.</b> Si hay completo, cambia a <b>Listo para surtir</b>.<br><br>
-            <b>4.</b> Al empacar, el sistema genera salidas de almacén y baja stock.<br><br>
-            <b>5.</b> Administración marca el pedido como <b>Facturado</b>.
-          </div>
+      <div class="login-grid">
+        <div class="card">
+          <h3>Administración</h3>
+          <p class="sub">Acceso completo al panel: facturas, cobranza, servicios, configuración y pedidos.</p>
+          <form class="form" id="adminLoginForm">
+            <div class="field"><label>Clave administración</label><input type="password" name="password" autocomplete="current-password"></div>
+            <button class="save-btn" type="submit">Entrar a administración</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h3>Vendedor</h3>
+          <p class="sub">Acceso limitado: solo puede hacer pedidos y revisar el estado de pedidos.</p>
+          <form class="form" id="sellerLoginForm">
+            <div class="field"><label>Clave vendedor</label><input type="password" name="password" autocomplete="current-password"></div>
+            <button class="save-btn" type="submit">Entrar a pedidos</button>
+          </form>
         </div>
       </div>
-    </div>
 
-    <div class="note-box">
-      <b>Pedidos guardados actualmente:</b> ${orders.length}
-    </div>
-    <div class="table-title">Pedidos registrados</div>
-    <div class="kpi-list">
-      ${orders.length ? orders.map(order => `
-        <div class="card" style="padding:16px">
-          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
-            <div>
-              <div style="font-size:18px;font-weight:800">${order.folio} · ${order.client}</div>
-              <div style="margin-top:6px;color:#64748b;font-size:13px">Fecha: ${order.date} · Estatus: <b>${order.status}</b></div>
-              <div style="margin-top:6px;color:#64748b;font-size:13px">${order.notes || 'Sin observaciones'}</div>
-            </div>
-            <div class="actions-row">
-              ${session.role === 'almacen' && (order.status === 'Pendiente almacén' || order.status === 'Incompleto') ? `<button class="ghost-btn" data-review-order="${order.id}">Revisar disponibilidad</button>` : ''}
-              ${session.role === 'almacen' && order.status === 'Listo para surtir' ? `<button class="save-btn" data-pack-order="${order.id}">Empacar / surtir</button>` : ''}
-              ${session.role === 'administrador' && order.status === 'Empacado' ? `<button class="save-btn" data-invoice-order="${order.id}">Marcar facturado</button>` : ''}
-              ${session.role === 'administrador' && (order.status === 'Pendiente almacén' || order.status === 'Incompleto') ? `<button class="danger-btn" data-cancel-order="${order.id}">Cancelar</button>` : ''}
-            </div>
-          </div>
-
-          <div class="table-wrap" style="margin-top:14px">
-            <table>
-              <thead>
-                <tr><th>Producto</th><th>Solicitado</th><th>Disponible</th><th>Resultado</th></tr>
-              </thead>
-              <tbody>
-                ${order.items.map(it => `
-                  <tr>
-                    <td>${it.product}</td>
-                    <td>${it.qty}</td>
-                    <td>${stockDisponible(it.productId)}</td>
-                    <td>${stockDisponible(it.productId) >= Number(it.qty) ? '<span class="badge" style="background:#ecfdf5;color:#166534">Hay</span>' : '<span class="badge" style="background:#fff7ed;color:#c2410c">No hay completo</span>'}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `).join('') : `<div class="note-box">Todavía no hay pedidos registrados.</div>`}
+      <div class="note-box">
+        Esta es una restricción rápida por clave dentro del programa. Más adelante se puede convertir a usuarios reales con Supabase Auth.
+      </div>
     </div>
   `;
 }
 
-
-function vistaConfigurar(){
-  const m = metricas();
-  const visible = state.dashboard.visible || [];
-  const notes = state.dashboard.notes || [];
-  return `
-    <div class="section-title">
-      <h2>Configurar dashboard</h2>
-      <p>Simple: marca qué KPI quieres ver y agrega notas rápidas.</p>
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Indicadores visibles</h3>
-          <p class="sub">Activa o quita KPI para el director</p>
-          <div class="kpi-list">
-            ${Object.entries(m).map(([id,item])=>`
-              <label class="kpi-row">
-                <div>
-                  <div style="font-weight:800">${item.label}</div>
-                  <div style="margin-top:4px;color:#64748b;font-size:13px">${item.sub}</div>
-                </div>
-                <input type="checkbox" data-kpi="${id}" ${visible.includes(id)?'checked':''}>
-                <button class="ghost-btn" data-remove-kpi="${id}">Quitar</button>
-              </label>`).join('')}
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Nota rápida para dashboard</h3>
-          <p class="sub">Texto libre para dirección</p>
-          <form id="noteForm" class="form">
-            <div class="field"><label>Título</label><input name="title" placeholder="Ej. Prioridad de la semana"></div>
-            <div class="field"><label>Texto</label><textarea name="text" placeholder="Ej. Revisar exactitud del inventario y cobranza vencida."></textarea></div>
-            <button class="save-btn" type="submit">Agregar nota</button>
-          </form>
-          <div class="table-title">Notas actuales</div>
-          <div class="kpi-list">
-            ${notes.length ? notes.map(n=>`
-              <div class="kpi-row">
-                <div>
-                  <div style="font-weight:800">${n.title}</div>
-                  <div style="margin-top:4px;color:#64748b;font-size:13px">${n.text}</div>
-                </div>
-                <span class="badge">Nota</span>
-                <button class="danger-btn" data-del-note="${n.id}">Borrar</button>
-              </div>`).join('') : '<div class="note-box">No hay notas todavía.</div>'}
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-function vistaInventario(){
-  const inv = inventarioConStock();
-  const info = state.importInfo;
-  const q = String(state.inventorySearch || '').trim().toLowerCase();
-  const filteredInv = q ? inv.filter(x =>
-    String(x.code || '').toLowerCase().includes(q) ||
-    String(x.product || '').toLowerCase().includes(q) ||
-    String(x.category || '').toLowerCase().includes(q) ||
-    String(x.location || '').toLowerCase().includes(q) ||
-    String(x.provider || '').toLowerCase().includes(q)
-  ) : inv;
-  const canManageInventory = session.role === 'administrador';
-
-  const deleteColumn = canManageInventory
-    ? [{key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="inventory" data-id="${row.id}">Borrar</button>`}]
-    : [];
-
-  const manualSection = canManageInventory
-    ? `
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Carga manual</h3>
-          <p class="sub">Alta individual de productos</p>
-          <form id="inventoryForm" class="form">
-            <div class="field"><label>Código</label><input name="code"></div>
-            <div class="field"><label>Producto</label><input name="product"></div>
-            <div class="field"><label>Categoría</label><input name="category"></div>
-            <div class="field"><label>Ubicación</label><input name="location"></div>
-            <div class="field"><label>Existencia inicial</label><input type="number" name="initialQty"></div>
-            <div class="field"><label>Mínimo</label><input type="number" name="min"></div>
-            <div class="field"><label>Máximo</label><input type="number" name="max"></div>
-            <div class="field"><label>Proveedor</label><input name="provider"></div>
-            <button class="save-btn" type="submit">Guardar producto</button>
-          </form>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Carga desde Excel</h3>
-          <p class="sub">Sube un archivo .xlsx, .xls o .csv</p>
-          <div class="actions-row">
-            <button class="download-btn" id="downloadTemplateBtn" type="button">Descargar plantilla CSV</button>
-          </div>
-          <div class="note-box">
-            Columnas sugeridas:<br>
-            <b>codigo, producto, categoria, ubicacion, existencia_inicial, minimo, maximo, proveedor</b><br><br>
-            También acepta variantes como: <b>code, product, category, location, cantidad, existencia, min, max, provider</b>.<br><br>
-            Si tu archivo no trae código, el sistema genera uno automático para que sí pueda subirlo a Supabase.
-          </div>
-          <form id="importForm" class="form">
-            <div class="field">
-              <label>Archivo Excel / CSV</label>
-              <input type="file" id="inventoryFile" accept=".xlsx,.xls,.csv">
-            </div>
-            <label class="check"><input type="checkbox" id="replaceInventory"> Reemplazar inventario actual</label>
-            <button class="save-btn" type="submit">Importar archivo</button>
-          </form>
-        </div>
-      </div>`
-    : `
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Inventario protegido</h3>
-          <p class="sub">Solo el administrador puede editar el inventario maestro</p>
-          <div class="note-box">
-            Este perfil no puede dar de alta, importar ni borrar productos del inventario.
-            El stock solamente cambia por <b>entradas</b> y <b>salidas</b> registradas en el sistema.
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Consulta de inventario</h3>
-          <p class="sub">Puedes buscar y revisar existencias, pero no modificar el catálogo.</p>
-          <div class="note-box">
-            Para cambios directos al inventario maestro entra con el perfil <b>Administrador</b>.
-          </div>
-        </div>
-      </div>`;
-
-  return `
-    <div class="section-title">
-      <h2>Inventario</h2>
-      <p>${canManageInventory ? 'Aquí puedes cargar y administrar el inventario maestro.' : 'Vista de consulta del inventario maestro.'}</p>
-    </div>
-    <div class="actions-row">
-      <button class="ghost-btn" id="refreshInventoryBtn" type="button">Actualizar inventario desde Supabase</button>
-    </div>
-    <div class="note-box">
-      En Inventario se desactivó la auto-recarga para que no interfiera cuando capturas código y nombre de producto.
-    </div>
-
-    <div class="metrics">
-      ${cardMetric({label:'Productos',value:String(inv.length),sub:'Inventario maestro',status:'good'})}
-      ${cardMetric({label:'Stock total',value:String(inv.reduce((a,b)=>a+Number(b.stock||0),0)),sub:'Existencia total',status:'good'})}
-      ${cardMetric({label:'Críticos',value:String(inv.filter(x=>x.critical).length),sub:'En mínimo o menos',status:inv.filter(x=>x.critical).length>0?'warn':'good'})}
-      ${cardMetric({label:'Ubicaciones',value:String(new Set(inv.map(x=>x.location||'')).size),sub:'Ubicaciones registradas',status:'good'})}
-    </div>
-
-    ${info ? `
-      <div class="note-box ${info.imported > 0 ? 'status-ok' : 'status-warn'}">
-        <b>Última importación</b><br>
-        Filas leídas: ${info.rowsRead} · Importadas: ${info.imported} · Omitidas: ${info.skipped}<br>
-        ${info.message || ''}
-      </div>` : ''}
-
-    <div class="grid-2">
-      ${manualSection}
-    </div>
-
-    <div class="actions-row" style="margin-top:18px">
-      <div style="flex:1;min-width:260px">
-        <input id="inventorySearch" placeholder="🔎 Buscar producto, código, categoría, ubicación o proveedor" value="${state.inventorySearch || ''}">
-      </div>
-    </div>
-
-    <div class="note-box">
-      <b>Cómo se mueve el stock:</b><br>
-      Stock actual = Existencia inicial + Entradas - Salidas.<br>
-      Para afectar correctamente el stock, en Almacén selecciona el producto desde el campo <b>Producto del inventario</b>.
-    </div>
-
-    <div class="table-title">Inventario cargado</div>
-    ${tabla([
-      {key:'code',label:'Código'},
-      {key:'product',label:'Producto'},
-      {key:'category',label:'Categoría'},
-      {key:'location',label:'Ubicación'},
-      {key:'initialQty',label:'Inicial'},
-      {key:'stock',label:'Stock actual'},
-      {key:'min',label:'Mínimo'},
-      {key:'critical',label:'Estado',render:v=>v?'<span class="badge" style="background:#fff7ed;color:#c2410c">Crítico</span>':'<span class="badge" style="background:#ecfdf5;color:#166534">OK</span>'},
-      ...deleteColumn
-    ], filteredInv)}
-  `;
-}
-
-
-function vistaCompras(){
-  const inv = inventarioConStock();
-  const calc = state.purchaseCalc || {productId:'',monthlyDemand:'',leadDays:'',safetyDays:'',reviewDays:'',result:null};
-  const selected = inv.find(x => String(x.id) === String(calc.productId));
-
-  const underMin = inv.filter(x => Number(x.min || 0) > 0 && Number(x.stock || 0) <= Number(x.min || 0));
-  const withoutConfig = inv.filter(x => Number(x.min || 0) === 0 && Number(x.max || 0) === 0);
-  const suggested = inv
-    .map(x => {
-      const stock = Number(x.stock || 0);
-      const min = Number(x.min || 0);
-      const max = Number(x.max || 0);
-      const reorderQty = max > stock ? Math.max(0, max - stock) : 0;
-      return {
-        ...x,
-        reorderQty,
-        buyNow: min > 0 && stock <= min
-      };
-    })
-    .filter(x => x.buyNow || x.reorderQty > 0)
-    .sort((a,b) => {
-      if(a.buyNow !== b.buyNow) return a.buyNow ? -1 : 1;
-      return Number(b.reorderQty || 0) - Number(a.reorderQty || 0);
-    });
-
-  const totalSuggestedUnits = suggested.reduce((acc, item) => acc + Number(item.reorderQty || 0), 0);
-
-  return `
-    <div class="section-title">
-      <h2>Compras</h2>
-      <p>Define máximos y mínimos, detecta faltantes y genera compras sugeridas para almacén.</p>
-    </div>
-
-    <div class="metrics">
-      ${cardMetric({label:'Bajo mínimo',value:String(underMin.length),sub:'Productos que ya piden compra',status:underMin.length>0?'warn':'good'})}
-      ${cardMetric({label:'Unidades sugeridas',value:String(totalSuggestedUnits),sub:'Compra estimada para reponer',status:totalSuggestedUnits>0?'warn':'good'})}
-      ${cardMetric({label:'Sin configuración',value:String(withoutConfig.length),sub:'Productos sin mínimo y máximo',status:withoutConfig.length>0?'warn':'good'})}
-      ${cardMetric({label:'Productos revisados',value:String(inv.length),sub:'Base para compras',status:'good'})}
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Calculadora de máximos y mínimos</h3>
-          <p class="sub">Llenas los datos y el sistema te propone el mínimo y el máximo.</p>
-          <form id="purchaseCalcForm" class="form">
-            <div class="field">
-              <label>Producto</label>
-              <select name="productId">
-                <option value="">Selecciona un producto</option>
-                ${inv.map(x => `<option value="${x.id}" ${String(calc.productId)===String(x.id)?'selected':''}>${x.product}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field"><label>Consumo promedio mensual</label><input type="number" step="any" name="monthlyDemand" value="${calc.monthlyDemand || ''}" placeholder="Ej. 30"></div>
-            <div class="field"><label>Tiempo de entrega en días</label><input type="number" step="any" name="leadDays" value="${calc.leadDays || ''}" placeholder="Ej. 10"></div>
-            <div class="field"><label>Días de seguridad</label><input type="number" step="any" name="safetyDays" value="${calc.safetyDays || ''}" placeholder="Ej. 5"></div>
-            <div class="field"><label>Días de revisión</label><input type="number" step="any" name="reviewDays" value="${calc.reviewDays || ''}" placeholder="Ej. 15"></div>
-            <button class="save-btn" type="submit">Calcular</button>
-          </form>
-
-          <div class="note-box">
-            <b>Fórmulas:</b><br><br>
-            Consumo diario = Consumo mensual / 30<br>
-            Mínimo = Consumo diario × (Tiempo de entrega + Días de seguridad)<br>
-            Máximo = Mínimo + (Consumo diario × Días de revisión)
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Resultado</h3>
-          <p class="sub">Propuesta sugerida para compras</p>
-
-          ${calc.result ? `
-            <div class="metrics" style="grid-template-columns:repeat(2,1fr)">
-              ${cardMetric({label:'Consumo diario',value:String(calc.result.dailyDemand),sub:'Promedio diario',status:'good'})}
-              ${cardMetric({label:'Stock de seguridad',value:String(calc.result.safetyStock),sub:'Colchón recomendado',status:'good'})}
-              ${cardMetric({label:'Mínimo sugerido',value:String(calc.result.minSuggested),sub:'Punto de reposición',status:'warn'})}
-              ${cardMetric({label:'Máximo sugerido',value:String(calc.result.maxSuggested),sub:'Tope recomendado',status:'good'})}
-            </div>
-
-            <div class="note-box">
-              <b>Producto:</b> ${selected ? selected.product : 'Sin seleccionar'}<br><br>
-              Cuando el stock llegue al mínimo, conviene lanzar la reposición. El máximo te ayuda a no sobrecomprar.
-            </div>
-
-            ${selected ? `<div class="actions-row"><button class="save-btn" id="applyMinMaxBtn">Aplicar mínimo y máximo al producto</button></div>` : ''}
-          ` : `
-            <div class="note-box">Llena los datos de la izquierda y presiona <b>Calcular</b> para ver el resultado.</div>
-          `}
-
-          <div class="table-title">Prioridad de compra</div>
-          <div class="note-box">
-            <b>Comprar ya:</b> productos con stock igual o menor al mínimo.<br>
-            <b>Compra sugerida:</b> cantidad para acercarse al máximo configurado.
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="table-title">Compras sugeridas</div>
-    ${tabla([
-      {key:'product',label:'Producto'},
-      {key:'stock',label:'Stock actual'},
-      {key:'min',label:'Mínimo'},
-      {key:'max',label:'Máximo'},
-      {key:'reorderQty',label:'Compra sugerida'},
-      {key:'buyNow',label:'Prioridad',render:v=>v?'<span class="badge" style="background:#fff7ed;color:#c2410c">Comprar ya</span>':'<span class="badge" style="background:#ecfdf5;color:#166534">Programar</span>'}
-    ], suggested)}
-
-    <div class="table-title">Resumen actual de inventario para compras</div>
-    ${tabla([
-      {key:'product',label:'Producto'},
-      {key:'stock',label:'Stock actual'},
-      {key:'min',label:'Mínimo'},
-      {key:'max',label:'Máximo'},
-      {key:'critical',label:'Estado',render:v=>v?'<span class="badge" style="background:#fff7ed;color:#c2410c">Revisar</span>':'<span class="badge" style="background:#ecfdf5;color:#166534">OK</span>'}
-    ], inv)}
-  `;
-}
-
-
-function vistaAlmacen(){
-  const inv = inventarioConStock();
-  return `
-    <div class="section-title">
-      <h2>Almacén</h2>
-      <p>Captura rápida y tablas claras. Ahora las entradas y salidas se ligan directo al inventario.</p>
-    </div>
-
-    <div class="grid-3">
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Entrada</h3>
-          <form id="entryForm" class="form">
-            <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
-            <div class="field"><label>Proveedor</label><input name="supplier"></div>
-            <div class="field"><label>Categoría (si es producto nuevo)</label><input name="category"></div>
-            <div class="field"><label>Ubicación (si es producto nuevo)</label><input name="location"></div>
-            <div class="field">
-              <label>Producto del inventario</label>
-              <select name="productId" id="entryProductId">
-                <option value="">Selecciona un producto</option>
-                ${inv.map(x => `<option value="${x.id}">${x.product}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field"><label>Producto manual (solo si no está en inventario)</label><input name="product"></div>
-            <div class="note-box">Si capturas un producto nuevo aquí y no existe en inventario, el sistema lo dará de alta automáticamente al guardar la entrada.</div>
-            <div class="field"><label>Cantidad</label><input type="number" name="qty"></div>
-            <label class="check"><input type="checkbox" name="sameDay" checked> Registrada el mismo día</label>
-            <button class="save-btn" type="submit">Guardar</button>
-          </form>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Salida</h3>
-          <form id="outputForm" class="form">
-            <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
-            <div class="field"><label>Área</label><select name="area"><option>Ventas</option><option>Servicio</option><option>Cliente</option></select></div>
-            <div class="field">
-              <label>Producto del inventario</label>
-              <select name="productId" id="outputProductId">
-                <option value="">Selecciona un producto</option>
-                ${inv.map(x => `<option value="${x.id}">${x.product}</option>`).join('')}
-              </select>
-            </div>
-            <div class="field"><label>Producto manual (solo si no está en inventario)</label><input name="product"></div>
-            <div class="note-box">Si capturas un producto nuevo aquí y no existe en inventario, el sistema lo dará de alta automáticamente al guardar la entrada.</div>
-            <div class="field"><label>Cantidad</label><input type="number" name="qty"></div>
-            <label class="check"><input type="checkbox" name="doubleCheck" checked> Doble verificación</label>
-            <button class="save-btn" type="submit">Guardar</button>
-          </form>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Conteo</h3>
-          <form id="countForm" class="form">
-            <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
-            <div class="field"><label>Zona</label><input name="zone"></div>
-            <div class="field"><label>Sistema</label><input type="number" name="systemQty"></div>
-            <div class="field"><label>Físico</label><input type="number" name="physicalQty"></div>
-            <label class="check"><input type="checkbox" name="corrected24h"> Corregida en 24h</label>
-            <button class="save-btn" type="submit">Guardar</button>
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <div class="grid-3">
-      <div>
-        <div class="table-title">Entradas</div>
-        ${tabla([
-          {key:'date',label:'Fecha'},
-          {key:'product',label:'Producto'},
-          {key:'qty',label:'Cantidad'},
-          {key:'sameDay',label:'Al día',render:v=>v?'Sí':'No'},
-          {key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="entry" data-id="${row.id}">Borrar</button>`}
-        ], state.warehouseEntries)}
-      </div>
-      <div>
-        <div class="table-title">Salidas</div>
-        ${tabla([
-          {key:'date',label:'Fecha'},
-          {key:'product',label:'Producto'},
-          {key:'qty',label:'Cantidad'},
-          {key:'doubleCheck',label:'Check',render:v=>v?'Sí':'No'},
-          {key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="output" data-id="${row.id}">Borrar</button>`}
-        ], state.warehouseOutputs)}
-      </div>
-      <div>
-        <div class="table-title">Conteos</div>
-        ${tabla([
-          {key:'date',label:'Fecha'},
-          {key:'zone',label:'Zona'},
-          {key:'systemQty',label:'Sistema'},
-          {key:'physicalQty',label:'Físico'},
-          {key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="count" data-id="${row.id}">Borrar</button>`}
-        ], state.counts)}
-      </div>
-    </div>`;
-}
-
-function vistaVentas(){
-  const salesBase = state.sales || [];
-  const seller1Closed = salesBase.filter(x => (x.seller || '') === 'Vendedor 1' && esCerrada(x.status));
-  const seller2Closed = salesBase.filter(x => (x.seller || '') === 'Vendedor 2' && esCerrada(x.status));
-  const followups = salesBase.filter(x => x.status === 'Seguimiento').length;
-
-  return `
-    <div class="section-title">
-      <h2>Ventas</h2>
-      <p>Registro comercial compartido. Lo que capture ventas impacta en el dashboard del director.</p>
-    </div>
-
-    <div class="note-box">
-      Mientras escribes en ventas, la pantalla ya no debe recargarse sola para no borrar lo que estás capturando.
-    </div>
-
-    <div class="actions-row">
-      <button class="ghost-btn" id="refreshSalesBtn" type="button">Actualizar ventas desde Supabase</button>
-    </div>
-
-    <div class="metrics">
-      ${cardMetric({label:'Ventas cerradas V1',value:dinero(seller1Closed.reduce((a,b)=>a+Number(b.amount||0),0)),sub:'Monto cerrado Vendedor 1',status:'good'})}
-      ${cardMetric({label:'Ventas cerradas V2',value:dinero(seller2Closed.reduce((a,b)=>a+Number(b.amount||0),0)),sub:'Monto cerrado Vendedor 2',status:'good'})}
-      ${cardMetric({label:'Seguimientos',value:String(followups),sub:'Oportunidades activas',status:followups>0?'warn':'good'})}
-      ${cardMetric({label:'Registros',value:String(salesBase.length),sub:'Actividades comerciales',status:'good'})}
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Nueva actividad</h3>
-          <form id="salesForm" class="form">
-            <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
-            <div class="field"><label>Cliente</label><input name="client"></div>
-            <div class="field"><label>Vendedor</label><select name="seller"><option>Vendedor 1</option><option>Vendedor 2</option></select></div>
-            <div class="field"><label>Contacto</label><input name="contact" placeholder="Ej. Compras / Dirección"></div>
-            <div class="field"><label>Tipo</label><select name="type"><option>Cotización</option><option>Seguimiento</option><option>Venta</option><option>Visita</option></select></div>
-            <div class="field"><label>Monto</label><input type="number" name="amount"></div>
-            <div class="field"><label>Estatus</label><select name="status"><option>Seguimiento</option><option>Ganada</option><option>Perdida</option></select></div>
-            <div class="field"><label>Próximo seguimiento</label><input type="date" name="nextFollowUp" value="${hoy()}"></div>
-            <div class="field"><label>Prioridad</label><select name="priority"><option>Alta</option><option>Media</option><option>Baja</option></select></div>
-            <div class="field"><label>Notas</label><textarea name="notes" placeholder="Detalle breve de la oportunidad"></textarea></div>
-            <label class="check"><input type="checkbox" name="followUp48h" checked> Seguimiento dentro de 48h</label>
-            <button class="save-btn" type="submit">Guardar</button>
-          </form>
-        </div>
-      </div>
-      <div>
-        <div class="table-title">Actividades</div>
-        ${tabla([
-          {key:'date',label:'Fecha'},
-          {key:'client',label:'Cliente'},
-          {key:'seller',label:'Vendedor'},
-          {key:'type',label:'Tipo'},
-          {key:'amount',label:'Monto',render:v=>dinero(v)},
-          {key:'status',label:'Estatus'},
-          {key:'nextFollowUp',label:'Próx. seguimiento'},
-          {key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="sale" data-id="${row.id}">Borrar</button>`}
-        ], salesBase)}
-      </div>
-    </div>`;
-}
-
-function vistaCobranza(){
-  const abiertas = (state.collections || []).filter(x => !x.paid);
-  const vencidas = abiertas.filter(x => diasVencido(x.dueDate) > 0);
-  const porVencer = abiertas.filter(x => {
-    const d = diasVencido(x.dueDate);
-    return d <= 0 && d >= -7;
+function attachLoginEvents(){
+  document.getElementById('adminLoginForm')?.addEventListener('submit', e => {
+    e.preventDefault();
+    const password = String(new FormData(e.target).get('password') || '').trim();
+    if(password !== ADMIN_PASSWORD){ alert('Clave de administración incorrecta.'); return; }
+    session = {role:'admin'};
+    saveSession();
+    state.activeTab = 'dashboard';
+    saveState();
+    render();
   });
 
+  document.getElementById('sellerLoginForm')?.addEventListener('submit', e => {
+    e.preventDefault();
+    const password = String(new FormData(e.target).get('password') || '').trim();
+    if(password !== SELLER_PASSWORD){ alert('Clave de vendedor incorrecta.'); return; }
+    session = {role:'seller'};
+    saveSession();
+    state.activeTab = 'orders';
+    saveState();
+    render();
+  });
+}
+
+function monthBox(){
+  return `<div class="month-box">
+    <label>Mes</label>
+    <input type="month" id="monthInput" value="${esc(state.month)}">
+    <button class="small-btn" id="reloadBtn" type="button">Actualizar ahora</button>
+    <div style="margin-top:8px;color:#64748b;font-size:12px;line-height:1.35">
+      ${lastAutoSyncAt ? 'Última autoactualización: ' + esc(lastAutoSyncAt) : 'Autoactualiza cada 5 segundos si no estás escribiendo.'}
+    </div>
+  </div>`;
+}
+
+function viewDashboard(){
+  const m = getMonthly();
   return `
     <div class="section-title">
-      <h2>Cobranza</h2>
-      <p>Registro compartido de facturas. También impacta los indicadores del dashboard del director.</p>
-    </div>
-
-    <div class="note-box">
-      Mientras escribes en cobranza, la pantalla ya no debe recargarse sola para no borrar lo que estás capturando.
-    </div>
-
-    <div class="actions-row">
-      <button class="ghost-btn" id="refreshCollectionsBtn" type="button">Actualizar cobranza desde Supabase</button>
+      <div>
+        <h2>Dashboard</h2>
+        <p>Resumen administrativo del mes. Ahora el por cobrar se calcula con abonos reales, útil para PPD.</p>
+      </div>
+      ${monthBox()}
     </div>
 
     <div class="metrics">
-      ${cardMetric({label:'Abiertas',value:String(abiertas.length),sub:`${abiertas.length} facturas abiertas`,status:abiertas.length>0?'warn':'good'})}
-      ${cardMetric({label:'Vencidas',value:String(vencidas.length),sub:`${vencidas.length} facturas vencidas`,status:vencidas.length>0?'bad':'good'})}
-      ${cardMetric({label:'Por vencer',value:String(porVencer.length),sub:`${porVencer.length} vencen en 7 días`,status:porVencer.length>0?'warn':'good'})}
-      ${cardMetric({label:'Monto abierto',value:dinero(abiertas.reduce((a,b)=>a+Number(b.amount||0),0)),sub:`${abiertas.length} facturas pendientes`,status:'good'})}
+      ${metric('Facturado emitido', money(m.issuedTotal), `${m.issued.length} facturas del mes`, 'good')}
+      ${metric('Cobrado del mes', money(m.collected), 'Pagos/abonos recibidos en el mes', 'good')}
+      ${metric('Por cobrar real', money(m.receivable), 'Total emitido menos abonos registrados', m.receivable>0?'warn':'good')}
+      ${metric('Saldo PPD', money(m.ppdBalance), `${m.ppdInvoices.length} facturas PPD`, m.ppdBalance>0?'warn':'good')}
+
+      ${metric('Facturas recibidas', money(m.receivedTotal), `${m.received.length} facturas registradas`, 'blue')}
+      ${metric('Por pagar', money(m.payable), 'Facturas recibidas pendientes de pago', m.payable>0?'warn':'good')}
+      ${metric('IVA estimado', money(m.ivaToPay), 'IVA emitido - IVA recibido', m.ivaToPay>0?'warn':'good')}
+      ${metric('ISR estimado', money(m.estimatedIsr), `${state.isrRate}% sobre utilidad de flujo`, m.estimatedIsr>0?'warn':'good')}
+
+      ${metric('Parciales', String(m.partialInvoices.length), 'Facturas con abonos pero saldo pendiente', m.partialInvoices.length?'warn':'good')}
+      ${metric('Comp. pendientes', String(m.complementPending), 'Pagos sin complemento marcado', m.complementPending?'warn':'good')}
+      ${metric('Utilidad estimada', money(m.estimatedProfit), 'Cobrado - gastos pagados', m.estimatedProfit>=0?'good':'bad')}
+      ${metric('Servicios por facturar', money(m.servicePendingAmount), `${m.pendingServices.length} hojas pendientes`, m.pendingServices.length?'warn':'good')}
     </div>
 
     <div class="grid-2">
       <div class="card">
-        <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Nueva factura</h3>
-          <form id="colForm" class="form">
-            <div class="field"><label>Factura</label><input name="invoice"></div>
-            <div class="field"><label>Cliente</label><input name="client"></div>
-            <div class="field"><label>Monto</label><input type="number" name="amount"></div>
-            <div class="field"><label>Vence</label><input type="date" name="dueDate" value="${hoy()}"></div>
-            <div class="field"><label>Estatus</label><select name="status"><option>Pendiente</option><option>Pagada</option><option>Parcial</option></select></div>
-            <label class="check"><input type="checkbox" name="paid"> Pagada</label>
-            <label class="check"><input type="checkbox" name="contactedBeforeDue" checked> Contactado antes del vencimiento</label>
-            <button class="save-btn" type="submit">Guardar</button>
-          </form>
+        <h3>Lectura rápida</h3>
+        <p class="sub">Lo que más importa para no perder control.</p>
+        <div class="note-box">
+          <b>Dinero pendiente de entrar:</b> ${money(m.receivable)}<br>
+          <b>De eso PPD pendiente:</b> ${money(m.ppdBalance)}<br>
+          <b>Complementos de pago pendientes de marcar:</b> ${m.complementPending}<br>
+          <b>Dinero pendiente de salir:</b> ${money(m.payable)}<br><br>
+          <b>Después de IVA e ISR estimados:</b> ${money(m.estimatedProfit - Math.max(m.ivaToPay,0) - m.estimatedIsr)}
         </div>
       </div>
-      <div>
-        <div class="table-title">Facturas</div>
-        ${tabla([
-          {key:'invoice',label:'Factura'},
-          {key:'client',label:'Cliente'},
-          {key:'amount',label:'Monto',render:v=>dinero(v)},
-          {key:'dueDate',label:'Vence'},
-          {key:'status',label:'Estatus'},
-          {key:'paid',label:'Pagada',render:v=>v?'Sí':'No'},
-          {key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="collection" data-id="${row.id}">Borrar</button>`}
-        ], state.collections)}
+      <div class="card">
+        <h3>Pendientes</h3>
+        <p class="sub">Facturas y servicios que requieren atención.</p>
+        <div class="note-box">
+          <b>Facturas emitidas con saldo:</b> ${m.issued.filter(x=>balanceForInvoice(x)>0).length}<br>
+          <b>Facturas parcialmente pagadas:</b> ${m.partialInvoices.length}<br>
+          <b>Facturas recibidas sin pagar:</b> ${m.received.filter(x=>!x.paid).length}<br>
+          <b>Servicios sin facturar:</b> ${m.pendingServices.length}<br><br>
+          Usa la pestaña <b>Cobranza</b> para registrar abonos y ver saldos exactos.
+        </div>
       </div>
-    </div>`;
+    </div>
+
+    <div class="table-title">Facturas emitidas con saldo</div>
+    ${invoiceTable('issued', m.issued.filter(x=>balanceForInvoice(x)>0).slice(0,8), true)}
+
+    <div class="table-title">Pagos / abonos del mes</div>
+    ${paymentsTable(m.paymentsMonth.slice(0,8), true)}
+  `;
 }
 
-function descargarPlantillaCSV(){
-  const rows = [
-    ['codigo','producto','categoria','ubicacion','existencia_inicial','minimo','maximo','proveedor'],
-    ['REA-001','Reactivo A','Reactivos','Rack A',10,5,20,'Proveedor A'],
-    ['CON-001','Control Hematología','Controles','Rack B',8,2,10,'Proveedor B']
-  ];
-  const csv = rows.map(r => r.join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'plantilla_inventario_seyalab.csv';
-  a.click();
+function viewIssued(){
+  const rows = state.issued.filter(monthFilter);
+  const totalBalance = rows.reduce((a,b)=>a+balanceForInvoice(b),0);
+  const totalPaid = rows.reduce((a,b)=>a+paidAmountForInvoice(b),0);
+  return `
+    <div class="section-title">
+      <div>
+        <h2>Facturas emitidas</h2>
+        <p>Lo que SotoMed factura a clientes. Para PPD puedes registrar abonos desde la tabla.</p>
+      </div>
+      ${monthBox()}
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Nueva factura emitida</h3>
+        <p class="sub">Captura a mano o adjunta XML CFDI. Si el XML trae PPD, el campo método se llena solo.</p>
+        <div class="xml-box">
+          <b>Importar XML CFDI</b><br>
+          Adjunta el XML y se llenan cliente, factura, fecha, subtotal, IVA, total y método PUE/PPD.
+          <input type="file" id="issuedXmlFile" accept=".xml,text/xml,application/xml">
+          <div id="issuedXmlPreview" style="margin-top:10px">Todavía no has cargado XML.</div>
+        </div>
+        <form class="form" id="issuedForm">
+          <input type="hidden" name="xmlNotes" id="issuedXmlNotes">
+          <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
+          <div class="field"><label>Cliente</label><input name="client" placeholder="Ej. Laboratorio / clínica / distribuidor"></div>
+          <div class="field"><label>Número de factura</label><input name="invoiceNumber" placeholder="Ej. A-001"></div>
+          <div class="field"><label>Método de pago</label><select name="paymentMethod"><option value="PUE">PUE - Pago en una exhibición</option><option value="PPD">PPD - Parcialidades o diferido</option></select></div>
+          <div class="field"><label>Fecha de vencimiento</label><input type="date" name="dueDate"></div>
+          <div class="field"><label>Subtotal</label><input type="number" step="0.01" name="subtotal" id="issuedSubtotal"></div>
+          <div class="field"><label>IVA</label><input type="number" step="0.01" name="iva" id="issuedIva"></div>
+          <div class="field"><label>Total</label><input type="number" step="0.01" name="total" id="issuedTotal"></div>
+          <label class="check"><input type="checkbox" name="paid"> Pagada completa al capturar</label>
+          <div class="field"><label>Fecha de pago</label><input type="date" name="paymentDate"></div>
+          <button class="save-btn" type="submit">Guardar factura emitida</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3>Resumen de emitidas</h3>
+        <p class="sub">Corte del mes seleccionado.</p>
+        <div class="metrics" style="grid-template-columns:1fr 1fr">
+          ${metric('Total', money(sum(rows,'total')), `${rows.length} facturas`, 'good')}
+          ${metric('IVA', money(sum(rows,'iva')), 'IVA trasladado', 'warn')}
+          ${metric('Cobrado', money(totalPaid), 'Pagos/abonos registrados', 'good')}
+          ${metric('Saldo', money(totalBalance), 'Por cobrar real', totalBalance>0?'warn':'good')}
+        </div>
+        <div class="note-box">
+          Para una factura PPD, guárdala y luego usa <b>Agregar pago</b>. El saldo se calcula solo.
+        </div>
+      </div>
+    </div>
+
+    <div class="table-title">Listado de facturas emitidas</div>
+    ${invoiceTable('issued', rows)}
+
+    <div class="table-title">Pagos / abonos relacionados</div>
+    ${paymentsTable((state.payments || []).filter(p => rows.some(inv => String(inv.id) === String(p.invoiceId))))}
+  `;
+}
+
+function viewCollections(){
+  const rows = state.issued
+    .filter(inv => balanceForInvoice(inv) > 0)
+    .sort((a,b) => String(a.dueDate || a.date).localeCompare(String(b.dueDate || b.date)));
+  const ppdRows = rows.filter(x => String(x.paymentMethod || 'PUE').toUpperCase() === 'PPD');
+  const totalBalance = rows.reduce((a,b)=>a+balanceForInvoice(b),0);
+  const overdue = rows.filter(x => x.dueDate && x.dueDate < hoy());
+  return `
+    <div class="section-title">
+      <div>
+        <h2>Cobranza</h2>
+        <p>Control exacto de lo que te deben: total, abonos, saldo y complementos pendientes.</p>
+      </div>
+      ${monthBox()}
+    </div>
+
+    <div class="metrics">
+      ${metric('Saldo por cobrar', money(totalBalance), `${rows.length} facturas con saldo`, totalBalance>0?'warn':'good')}
+      ${metric('Saldo PPD', money(ppdRows.reduce((a,b)=>a+balanceForInvoice(b),0)), `${ppdRows.length} facturas PPD`, ppdRows.length?'warn':'good')}
+      ${metric('Vencidas', String(overdue.length), 'Según fecha de vencimiento', overdue.length?'bad':'good')}
+      ${metric('Comp. pendientes', String(rows.reduce((a,b)=>a+complementPendingForInvoice(b),0)), 'Pagos sin complemento marcado', rows.some(x=>complementPendingForInvoice(x)>0)?'warn':'good')}
+    </div>
+
+    <div class="note-box">
+      <b>Cómo usarlo:</b> en cada factura con saldo presiona <b>Agregar pago</b>. Si ya emitiste el complemento, márcalo en la tabla de pagos.
+    </div>
+
+    <div class="table-title">Facturas con saldo pendiente</div>
+    ${invoiceTable('issued', rows)}
+
+    <div class="table-title">Todos los pagos / abonos</div>
+    ${paymentsTable((state.payments || []).slice(0,100))}
+  `;
+}
+
+function viewReceived(){
+  const rows = state.received.filter(monthFilter);
+  return `
+    <div class="section-title">
+      <div>
+        <h2>Facturas recibidas</h2>
+        <p>Lo que SotoMed recibe de proveedores o gastos.</p>
+      </div>
+      ${monthBox()}
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Nueva factura recibida</h3>
+        <p class="sub">Puedes capturar a mano o adjuntar el XML CFDI para llenar los datos automáticamente.</p>
+        <div class="xml-box">
+          <b>Importar XML CFDI</b><br>
+          Adjunta el XML y se llenan proveedor, número de factura, fecha, subtotal, IVA y total.
+          <input type="file" id="receivedXmlFile" accept=".xml,text/xml,application/xml">
+          <div id="receivedXmlPreview" style="margin-top:10px">Todavía no has cargado XML.</div>
+        </div>
+        <form class="form" id="receivedForm">
+          <input type="hidden" name="xmlNotes" id="receivedXmlNotes">
+          <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
+          <div class="field"><label>Proveedor</label><input name="provider" placeholder="Ej. Proveedor / refacciones / gasolina"></div>
+          <div class="field"><label>Número de factura</label><input name="invoiceNumber" placeholder="Ej. F-1001"></div>
+          <div class="field"><label>Subtotal</label><input type="number" step="0.01" name="subtotal" id="receivedSubtotal"></div>
+          <div class="field"><label>IVA</label><input type="number" step="0.01" name="iva" id="receivedIva"></div>
+          <div class="field"><label>Total</label><input type="number" step="0.01" name="total" id="receivedTotal"></div>
+          <label class="check"><input type="checkbox" name="paid"> Pagada</label>
+          <div class="field"><label>Fecha de pago</label><input type="date" name="paymentDate"></div>
+          <button class="save-btn" type="submit">Guardar factura recibida</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3>Resumen de recibidas</h3>
+        <p class="sub">Corte del mes seleccionado.</p>
+        <div class="metrics" style="grid-template-columns:1fr 1fr">
+          ${metric('Total', money(sum(rows,'total')), `${rows.length} facturas`, 'blue')}
+          ${metric('IVA', money(sum(rows,'iva')), 'IVA acreditable', 'good')}
+          ${metric('Pagado', money(sum(rows.filter(x=>x.paid),'total')), 'Pagadas', 'blue')}
+          ${metric('Pendiente', money(sum(rows.filter(x=>!x.paid),'total')), 'Por pagar', rows.some(x=>!x.paid)?'warn':'good')}
+        </div>
+      </div>
+    </div>
+
+    <div class="table-title">Listado de facturas recibidas</div>
+    ${invoiceTable('received', rows)}
+  `;
+}
+
+function viewServices(){
+  const rows = state.services.filter(monthFilter);
+  const pending = rows.filter(x=>!x.invoiced);
+  return `
+    <div class="section-title">
+      <div>
+        <h2>Hojas de servicio</h2>
+        <p>Registro simple para saber qué servicios ya se facturaron y cuáles siguen pendientes.</p>
+      </div>
+      ${monthBox()}
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Nueva hoja de servicio</h3>
+        <form class="form" id="serviceForm">
+          <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
+          <div class="field"><label>Cliente</label><input name="client"></div>
+          <div class="field"><label>Folio de servicio</label><input name="serviceNumber" placeholder="Ej. HS-001"></div>
+          <div class="field"><label>Equipo</label><input name="equipment" placeholder="Ej. BC-5380 / refrigerador / centrifuga"></div>
+          <div class="field"><label>Trabajo realizado</label><textarea name="work"></textarea></div>
+          <div class="field"><label>Monto</label><input type="number" step="0.01" name="amount"></div>
+          <label class="check"><input type="checkbox" name="invoiced"> Ya facturado</label>
+          <div class="field"><label>Factura relacionada</label><input name="invoiceNumber" placeholder="Ej. A-001"></div>
+          <button class="save-btn" type="submit">Guardar hoja de servicio</button>
+        </form>
+      </div>
+      <div class="card">
+        <h3>Resumen de servicios</h3>
+        <div class="metrics" style="grid-template-columns:1fr 1fr">
+          ${metric('Servicios', String(rows.length), 'Hojas del mes', 'blue')}
+          ${metric('Por facturar', String(pending.length), 'Pendientes', pending.length?'warn':'good')}
+          ${metric('Monto total', money(sum(rows,'amount')), 'Servicios registrados', 'good')}
+          ${metric('Monto pendiente', money(sum(pending,'amount')), 'Pendiente de factura', pending.length?'warn':'good')}
+        </div>
+      </div>
+    </div>
+
+    <div class="table-title">Listado de hojas de servicio</div>
+    ${servicesTable(rows)}
+  `;
+}
+
+function viewOrders(){
+  const rows = (state.orders || []).filter(monthFilter);
+  const pending = rows.filter(x => x.status === 'Pendiente almacén');
+  const surtidos = rows.filter(x => x.status === 'Surtido');
+  const title = session.role === 'seller' ? 'Pedidos para almacén' : 'Pedidos de vendedores';
+  const subtitle = session.role === 'seller'
+    ? 'Captura pedidos desde donde estés. Solo tienes acceso a esta pantalla.'
+    : 'Administración revisa los pedidos que mandan los vendedores y actualiza el estatus.';
+
+  return `
+    <div class="section-title">
+      <div>
+        <h2>${title}</h2>
+        <p>${subtitle}</p>
+      </div>
+      ${monthBox()}
+    </div>
+
+    <div class="metrics">
+      ${metric('Pedidos del mes', String(rows.length), 'Registros capturados', 'blue')}
+      ${metric('Pendientes almacén', String(pending.length), 'Esperando revisión', pending.length?'warn':'good')}
+      ${metric('Surtidos', String(surtidos.length), 'Pedidos cerrados', 'good')}
+      ${metric('Parciales / sin existencia', String(rows.filter(x => x.status === 'Parcial' || x.status === 'Sin existencia').length), 'Requieren seguimiento', rows.some(x => x.status === 'Parcial' || x.status === 'Sin existencia')?'warn':'good')}
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Nuevo pedido</h3>
+        <p class="sub">Los vendedores solo llenan esto. Almacén o administración cambia el estatus después.</p>
+        <form class="form" id="orderForm">
+          <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
+          <div class="field"><label>Vendedor</label><input name="seller" placeholder="Nombre del vendedor"></div>
+          <div class="field"><label>Cliente</label><input name="client" placeholder="Cliente / laboratorio / distribuidor"></div>
+          <div class="field"><label>Producto o descripción</label><input name="product" placeholder="Producto, refacción o material solicitado"></div>
+          <div class="field"><label>Cantidad</label><input type="number" step="0.01" name="qty" placeholder="1"></div>
+          <div class="field"><label>Observaciones</label><textarea name="notes" placeholder="Notas para almacén"></textarea></div>
+          <button class="save-btn" type="submit">Enviar pedido a almacén</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Flujo simple</h3>
+        <p class="sub">Así se usa esta mejora.</p>
+        <div class="note-box">
+          <b>1.</b> El vendedor entra con su clave restringida.<br><br>
+          <b>2.</b> Captura el pedido desde celular o computadora.<br><br>
+          <b>3.</b> Administración / almacén lo ve en esta misma pantalla.<br><br>
+          <b>4.</b> Administración actualiza el estatus: pendiente, surtido, parcial, sin existencia o cancelado.
+        </div>
+      </div>
+    </div>
+
+    <div class="table-title">Pedidos registrados</div>
+    ${ordersTable(rows)}
+  `;
+}
+
+function viewSettings(){
+  return `
+    <div class="section-title">
+      <div>
+        <h2>Configuración</h2>
+        <p>Parámetros rápidos para cálculo y conexión con Supabase.</p>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Impuestos estimados</h3>
+        <p class="sub">Se usan solo para el dashboard.</p>
+        <form class="form" id="taxSettingsForm">
+          <div class="field"><label>IVA %</label><input type="number" step="0.01" name="ivaRate" value="${esc(state.ivaRate)}"></div>
+          <div class="field"><label>ISR estimado %</label><input type="number" step="0.01" name="isrRate" value="${esc(state.isrRate)}"></div>
+          <button class="save-btn" type="submit">Guardar configuración</button>
+        </form>
+        <div class="note-box">
+          El ISR es solo estimado. Lo dejé configurable porque depende de tu régimen, deducciones, retenciones y criterio contable.
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Conexión Supabase</h3>
+        <p class="sub">Para que el sistema guarde en la nube y funcione desde GitHub Pages.</p>
+        <form class="form" id="supabaseSettingsForm">
+          <div class="field"><label>Supabase URL</label><input name="supabaseUrl" value="${esc(normalizeSupabaseUrl(state.supabaseUrl))}" placeholder="https://xxxxx.supabase.co"></div>
+          <div class="field"><label>Publishable / Anon Key</label><textarea name="supabaseKey" placeholder="sb_publishable... o anon key">${esc(state.supabaseKey)}</textarea></div>
+          <button class="save-btn" type="submit">Guardar conexión</button>
+        </form>
+        <div class="actions-row">
+          <button class="ghost-btn" id="testSupabaseBtn">Probar / cargar datos</button>
+          <button class="danger-btn" id="clearLocalBtn">Borrar datos locales</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>SQL de Supabase</h3>
+      <p class="sub">Ejecuta este SQL en Supabase SQL Editor antes de conectar.</p>
+      <div class="actions-row">
+        <button class="ghost-btn" id="copySqlBtn">Copiar SQL</button>
+      </div>
+      <pre class="code" id="sqlBlock">${esc(SUPABASE_SQL)}</pre>
+    </div>
+  `;
+}
+
+function invoiceBadge(inv){
+  const st = invoiceStatus(inv);
+  if(st === 'Liquidada') return '<span class="badge good">Liquidada</span>';
+  if(st === 'Parcial') return '<span class="badge warn">Parcial</span>';
+  return '<span class="badge bad">Pendiente</span>';
+}
+
+function invoiceTable(type,rows,compact=false){
+  const nameCol = type === 'issued' ? 'Cliente' : 'Proveedor';
+  if(!rows.length) return `<div class="table-wrap"><div class="empty">Sin registros</div></div>`;
+
+  if(type !== 'issued'){
+    return `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th><th>${nameCol}</th><th>Factura</th><th>Subtotal</th><th>IVA</th><th>Total</th><th>Estado</th>${compact?'':'<th>Acciones</th>'}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td>${esc(r.date)}</td>
+                <td>${esc(r.provider)}</td>
+                <td>${esc(r.invoiceNumber)}</td>
+                <td>${money(r.subtotal)}</td>
+                <td>${money(r.iva)}</td>
+                <td><b>${money(r.total)}</b></td>
+                <td>${r.paid ? '<span class="badge good">Pagada</span>' : '<span class="badge warn">Pendiente</span>'}</td>
+                ${compact?'':`<td>
+                  <button class="small-btn" data-toggle-paid="${type}" data-id="${esc(r.id)}">${r.paid?'Marcar pendiente':'Marcar pagada'}</button>
+                  <button class="danger-btn small-btn" data-delete="${type}" data-id="${esc(r.id)}">Borrar</button>
+                </td>`}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th><th>Cliente</th><th>Factura</th><th>Método</th><th>Total</th><th>Abonado</th><th>Saldo</th><th>Estado</th><th>Comp.</th>${compact?'':'<th>Acciones</th>'}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => {
+            const paidAmount = paidAmountForInvoice(r);
+            const balance = balanceForInvoice(r);
+            const compPending = complementPendingForInvoice(r);
+            return `
+              <tr>
+                <td>${esc(r.date)}</td>
+                <td>${esc(r.client)}</td>
+                <td>${esc(r.invoiceNumber)}</td>
+                <td><span class="badge ${String(r.paymentMethod||'PUE').toUpperCase()==='PPD'?'warn':'good'}">${esc(r.paymentMethod || 'PUE')}</span></td>
+                <td><b>${money(r.total)}</b></td>
+                <td>${money(paidAmount)}</td>
+                <td><b>${money(balance)}</b></td>
+                <td>${invoiceBadge(r)}</td>
+                <td>${compPending ? '<span class="badge warn">'+compPending+' pendiente(s)</span>' : '<span class="badge good">OK</span>'}</td>
+                ${compact?'':`<td>
+                  <button class="small-btn" data-add-payment="${esc(r.id)}">Agregar pago</button>
+                  <button class="small-btn" data-toggle-paid="issued" data-id="${esc(r.id)}">${balance<=0?'Marcar pendiente':'Liquidar'}</button>
+                  <button class="danger-btn small-btn" data-delete="issued" data-id="${esc(r.id)}">Borrar</button>
+                </td>`}
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function paymentsTable(rows,compact=false){
+  if(!rows.length) return `<div class="table-wrap"><div class="empty">Sin pagos registrados</div></div>`;
+  const invoiceById = new Map((state.issued || []).map(inv => [String(inv.id), inv]));
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha pago</th><th>Factura</th><th>Cliente</th><th>Monto</th><th>Forma</th><th>Complemento</th>${compact?'':'<th>Acciones</th>'}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(p => {
+            const inv = invoiceById.get(String(p.invoiceId)) || {};
+            return `
+              <tr>
+                <td>${esc(p.paymentDate || '')}</td>
+                <td>${esc(inv.invoiceNumber || p.invoiceId || '')}</td>
+                <td>${esc(inv.client || '')}</td>
+                <td><b>${money(p.amount)}</b></td>
+                <td>${esc(p.paymentMethod || '')}</td>
+                <td>${p.complementIssued ? '<span class="badge good">Emitido</span>' : '<span class="badge warn">Pendiente</span>'}</td>
+                ${compact?'':`<td>
+                  <button class="small-btn" data-toggle-complement="${esc(p.id)}">${p.complementIssued?'Marcar pendiente':'Marcar emitido'}</button>
+                  <button class="danger-btn small-btn" data-delete="payments" data-id="${esc(p.id)}">Borrar</button>
+                </td>`}
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function ordersTable(rows){
+  if(!rows.length) return `<div class="table-wrap"><div class="empty">Sin pedidos registrados</div></div>`;
+  const statuses = ['Pendiente almacén','Surtido','Parcial','Sin existencia','Cancelado'];
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th><th>Vendedor</th><th>Cliente</th><th>Producto</th><th>Cantidad</th><th>Notas</th><th>Estatus</th>${session.role==='admin'?'<th>Acciones</th>':''}
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${esc(r.date)}</td>
+              <td>${esc(r.seller)}</td>
+              <td>${esc(r.client)}</td>
+              <td>${esc(r.product)}</td>
+              <td><b>${esc(r.qty)}</b></td>
+              <td>${esc(r.notes || '')}</td>
+              <td><span class="badge ${r.status==='Surtido'?'good':(r.status==='Cancelado'||r.status==='Sin existencia'?'bad':'warn')}">${esc(r.status || 'Pendiente almacén')}</span></td>
+              ${session.role==='admin'?`<td>
+                <select data-order-status="${esc(r.id)}">
+                  ${statuses.map(s => `<option value="${s}" ${s===(r.status || 'Pendiente almacén')?'selected':''}>${s}</option>`).join('')}
+                </select>
+                <button class="danger-btn small-btn" style="margin-top:8px" data-delete="orders" data-id="${esc(r.id)}">Borrar</button>
+              </td>`:''}
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function servicesTable(rows){
+  if(!rows.length) return `<div class="table-wrap"><div class="empty">Sin registros</div></div>`;
+  return `
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th><th>Cliente</th><th>Folio</th><th>Equipo</th><th>Trabajo</th><th>Monto</th><th>Estado</th><th>Factura</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr>
+              <td>${esc(r.date)}</td>
+              <td>${esc(r.client)}</td>
+              <td>${esc(r.serviceNumber)}</td>
+              <td>${esc(r.equipment)}</td>
+              <td>${esc(r.work)}</td>
+              <td><b>${money(r.amount)}</b></td>
+              <td>${r.invoiced ? '<span class="badge good">Facturado</span>' : '<span class="badge warn">Pendiente</span>'}</td>
+              <td>${esc(r.invoiceNumber || '')}</td>
+              <td>
+                <button class="small-btn" data-toggle-service="${esc(r.id)}">${r.invoiced?'Marcar pendiente':'Marcar facturado'}</button>
+                <button class="danger-btn small-btn" data-delete="services" data-id="${esc(r.id)}">Borrar</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
 }
 
 function attachEvents(){
-  const main = document.getElementById('main');
-
-  const refreshOrdersBtn = main.querySelector('#refreshOrdersBtn');
-  if(refreshOrdersBtn) refreshOrdersBtn.onclick = async ()=>{
-    await cargarPedidosSupabase();
-  };
-
-  const refreshInventoryBtn = main.querySelector('#refreshInventoryBtn');
-  if(refreshInventoryBtn) refreshInventoryBtn.onclick = async ()=>{
-    await cargarAlmacenSupabase();
-  };
-
-  const noteForm = main.querySelector('#noteForm');
-  if(noteForm){
-    noteForm.onsubmit = (e)=>{
-      e.preventDefault();
-      const fd = new FormData(noteForm);
-      state.dashboard.notes.unshift({id:Date.now(),title:fd.get('title'),text:fd.get('text')});
-      guardar(); renderMain();
-    };
-  }
-
-  main.querySelectorAll('[data-del-note]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const id = Number(btn.dataset.delNote);
-      state.dashboard.notes = state.dashboard.notes.filter(n=>n.id!==id);
-      guardar(); renderMain();
-    };
+  document.getElementById('monthInput')?.addEventListener('change', e => {
+    state.month = e.target.value || state.month;
+    saveState();
+    render();
   });
 
-  main.querySelectorAll('[data-kpi]').forEach(chk=>{
-    chk.onchange = ()=>{
-      const id = chk.dataset.kpi;
-      let arr = state.dashboard.visible || [];
-      if(chk.checked){
-        if(!arr.includes(id)) arr.push(id);
-      }else{
-        arr = arr.filter(x=>x!==id);
+  document.getElementById('reloadBtn')?.addEventListener('click', async () => {
+    await loadRemote();
+    render();
+  });
+
+  autoCalc('issued');
+  autoCalc('received');
+  attachXmlImport('issued');
+  attachXmlImport('received');
+
+  document.getElementById('issuedForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const item = {
+      id:uid(), date:fd.get('date') || hoy(), client:fd.get('client') || '', invoiceNumber:fd.get('invoiceNumber') || '',
+      subtotal:num(fd.get('subtotal')), iva:num(fd.get('iva')), total:num(fd.get('total')), paid:fd.get('paid')==='on',
+      paymentDate:fd.get('paymentDate') || '', notes:fd.get('xmlNotes') || '',
+      paymentMethod:fd.get('paymentMethod') || 'PUE', dueDate:fd.get('dueDate') || ''
+    };
+    await addItem('issued',item);
+  });
+
+  document.getElementById('receivedForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const item = {
+      id:uid(), date:fd.get('date') || hoy(), provider:fd.get('provider') || '', invoiceNumber:fd.get('invoiceNumber') || '',
+      subtotal:num(fd.get('subtotal')), iva:num(fd.get('iva')), total:num(fd.get('total')), paid:fd.get('paid')==='on',
+      paymentDate:fd.get('paymentDate') || '', notes:fd.get('xmlNotes') || '',
+      paymentMethod:fd.get('paymentMethod') || 'PUE', dueDate:fd.get('dueDate') || ''
+    };
+    await addItem('received',item);
+  });
+
+  document.getElementById('serviceForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const item = {
+      id:uid(), date:fd.get('date') || hoy(), client:fd.get('client') || '', serviceNumber:fd.get('serviceNumber') || '',
+      equipment:fd.get('equipment') || '', work:fd.get('work') || '', amount:num(fd.get('amount')),
+      invoiced:fd.get('invoiced')==='on', invoiceNumber:fd.get('invoiceNumber') || ''
+    };
+    await addItem('services',item);
+  });
+
+  document.getElementById('orderForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const item = {
+      id:uid(), date:fd.get('date') || hoy(), seller:fd.get('seller') || '', client:fd.get('client') || '',
+      product:fd.get('product') || '', qty:num(fd.get('qty')), notes:fd.get('notes') || '',
+      status:'Pendiente almacén'
+    };
+    if(!item.client || !item.product){
+      alert('Captura al menos cliente y producto/descripción.');
+      return;
+    }
+    await addItem('orders',item);
+  });
+
+  document.getElementById('taxSettingsForm')?.addEventListener('submit', e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    state.ivaRate = num(fd.get('ivaRate'));
+    state.isrRate = num(fd.get('isrRate'));
+    saveState();
+    alert('Configuración guardada.');
+    render();
+  });
+
+  document.getElementById('supabaseSettingsForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    state.supabaseUrl = normalizeSupabaseUrl(fd.get('supabaseUrl'));
+    state.supabaseKey = String(fd.get('supabaseKey') || '').trim();
+    saveState();
+    connectSupabase();
+    startAutoSync();
+    const ok = await loadRemote();
+    render();
+    if(ok){
+      alert('Conexión guardada correctamente. Supabase ya está activo.');
+    }
+  });
+
+  document.getElementById('testSupabaseBtn')?.addEventListener('click', async () => {
+    connectSupabase();
+    startAutoSync();
+    const ok = await loadRemote();
+    render();
+    if(ok){
+      alert('Prueba correcta: datos cargados desde Supabase.');
+    }
+  });
+
+  document.getElementById('clearLocalBtn')?.addEventListener('click', () => {
+    if(confirm('¿Borrar datos locales de este navegador? No borra Supabase.')){
+      localStorage.removeItem(STORAGE_KEY);
+      state = {...seed};
+      connectSupabase();
+      startAutoSync();
+      render();
+    }
+  });
+
+  document.getElementById('copySqlBtn')?.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(SUPABASE_SQL);
+    alert('SQL copiado.');
+  });
+
+
+  document.querySelectorAll('[data-add-payment]').forEach(btn => {
+    btn.onclick = async () => {
+      const invoiceId = btn.dataset.addPayment;
+      const inv = state.issued.find(x => String(x.id) === String(invoiceId));
+      if(!inv) return;
+      const balance = balanceForInvoice(inv);
+      if(balance <= 0){
+        alert('Esta factura ya está liquidada.');
+        return;
       }
-      state.dashboard.visible = arr;
-      guardar(); renderMain();
-    };
-  });
-
-  main.querySelectorAll('[data-remove-kpi]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const id = btn.dataset.removeKpi;
-      state.dashboard.visible = (state.dashboard.visible || []).filter(x=>x!==id);
-      guardar(); renderMain();
-    };
-  });
-
-  const inventorySearch = main.querySelector('#inventorySearch');
-  if(inventorySearch) inventorySearch.oninput = (e)=>{
-    const value = e.target.value || '';
-    const start = e.target.selectionStart;
-    const end = e.target.selectionEnd;
-    const scrollY = window.scrollY;
-    state.inventorySearch = value;
-    guardar();
-    renderMain();
-    const searchAgain = document.getElementById('inventorySearch');
-    if(searchAgain){
-      searchAgain.focus();
-      try{ searchAgain.setSelectionRange(start, end); }catch(err){}
-    }
-    window.scrollTo(0, scrollY);
-  };
-
-  const inventoryForm = main.querySelector('#inventoryForm');
-  if(inventoryForm) inventoryForm.onsubmit = async (e)=>{
-    e.preventDefault();
-    detenerAutoSync();
-    if(session.role !== 'administrador'){
-      alert('Solo el administrador puede dar de alta productos en inventario.');
-      return;
-    }
-    try{
-      const fd = new FormData(inventoryForm);
-      await insertarProductoSupabase({
-        code: fd.get('code'),
-        product: fd.get('product'),
-        category: fd.get('category'),
-        location: fd.get('location'),
-        initialQty: Number(fd.get('initialQty')||0),
-        min: Number(fd.get('min')||0),
-        max: Number(fd.get('max')||0),
-        provider: fd.get('provider')
-      });
-      state.importInfo = {rowsRead:1, imported:1, skipped:0, message:'Producto agregado en base compartida.'};
-      await cargarAlmacenSupabase(false);
-      guardar(); renderMain();
-      alert('Producto guardado en Supabase.');
-    }catch(err){
-      console.error(err);
-      alert('No se pudo guardar el producto en Supabase.');
-    }finally{
-      iniciarAutoSync();
-    }
-  };
-
-  const downloadTemplateBtn = main.querySelector('#downloadTemplateBtn');
-  if(downloadTemplateBtn) downloadTemplateBtn.onclick = descargarPlantillaCSV;
-
-  const importForm = main.querySelector('#importForm');
-  if(importForm) importForm.onsubmit = (e)=>{
-    e.preventDefault();
-    detenerAutoSync();
-    if(session.role !== 'administrador'){
-      alert('Solo el administrador puede importar inventario.');
-      return;
-    }
-    const fileInput = document.getElementById('inventoryFile');
-    const file = fileInput.files[0];
-    const replace = document.getElementById('replaceInventory').checked;
-    if(!file){
-      alert('Selecciona un archivo primero.');
-      return;
-    }
-    if(typeof XLSX === 'undefined'){
-      alert('No se cargó la librería de Excel. Abre el archivo con internet o exporta tu archivo como CSV.');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = async function(evt){
+      const amountRaw = prompt('Monto del pago / abono:', String(balance.toFixed(2)));
+      if(amountRaw === null) return;
+      const amount = num(amountRaw);
+      if(amount <= 0){ alert('Monto inválido.'); return; }
+      const paymentDate = prompt('Fecha de pago:', hoy()) || hoy();
+      const method = prompt('Forma de pago:', 'Transferencia') || 'Transferencia';
+      const complementIssued = confirm('¿Ya emitiste el complemento de pago para este abono?');
+      const complementDate = complementIssued ? (prompt('Fecha del complemento:', paymentDate) || paymentDate) : '';
+      const item = {
+        id:uid(), invoiceId, paymentDate, amount,
+        paymentMethod:method, complementIssued, complementDate,
+        notes:''
+      };
       try{
-        const wb = file.name.toLowerCase().endsWith('.csv')
-          ? XLSX.read(evt.target.result, {type:'binary'})
-          : XLSX.read(evt.target.result, {type:'array'});
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-
-        // Leer todo como matriz para poder encontrar la fila real de encabezados
-        const matrix = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
-
-        function norm(v){
-          return String(v || '')
-            .trim()
-            .toLowerCase()
-            .replaceAll('á','a').replaceAll('é','e').replaceAll('í','i').replaceAll('ó','o').replaceAll('ú','u')
-            .replaceAll('  ',' ')
-            .replaceAll('.','')
-            .replaceAll(' ','_');
+        if(supabaseClient && !String(invoiceId).startsWith('local_')){
+          await insertRemote('payments', item);
+          await loadRemote();
+        }else{
+          state.payments.unshift(item);
+          inv.paid = isInvoiceLiquidated(inv);
         }
+        saveState();
+        render();
+      }catch(err){
+        console.error(err);
+        alert('No pude guardar el pago. Revisa que hayas ejecutado el SQL V1.4.');
+      }
+    };
+  });
 
-        // Buscar una fila que tenga encabezados tipo inventario
-        let headerRowIndex = -1;
-        for(let i=0; i<matrix.length; i++){
-          const row = (matrix[i] || []).map(norm);
-          const hasArticulo = row.includes('articulo') || row.includes('codigo') || row.includes('code');
-          const hasExistencia = row.includes('existencia') || row.includes('existencia_inicial') || row.includes('cantidad') || row.includes('stock');
-          if(hasArticulo && hasExistencia){
-            headerRowIndex = i;
-            break;
-          }
+  document.querySelectorAll('[data-toggle-complement]').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.toggleComplement;
+      const pay = state.payments.find(x => String(x.id) === String(id));
+      if(!pay) return;
+      pay.complementIssued = !pay.complementIssued;
+      pay.complementDate = pay.complementIssued ? (pay.complementDate || hoy()) : '';
+      try{
+        if(supabaseClient && !String(id).startsWith('local_')){
+          await updateRemote('payments', id, {complementIssued:pay.complementIssued, complementDate:pay.complementDate});
+          await loadRemote();
         }
+        saveState();
+        render();
+      }catch(err){
+        console.error(err);
+        alert('No pude actualizar el complemento.');
+      }
+    };
+  });
 
-        if(headerRowIndex === -1){
-          state.importInfo = {
-            rowsRead: matrix.length,
-            imported: 0,
-            skipped: matrix.length,
-            message: 'No encontré una fila de encabezados válida. Tu archivo debe tener columnas como Artículo / Existencia o codigo / producto.'
-          };
-          guardar();
-          renderMain();
-          alert('No encontré la fila correcta de encabezados en el archivo.');
-          return;
-        }
+  document.querySelectorAll('[data-toggle-paid]').forEach(btn => {
+    btn.onclick = async () => {
+      const type = btn.dataset.togglePaid;
+      const id = btn.dataset.id;
+      const item = state[type].find(x => String(x.id) === String(id));
+      if(!item) return;
 
-        const header = (matrix[headerRowIndex] || []).map(norm);
-        const dataRows = matrix.slice(headerRowIndex + 1);
-
-        // Mapa por posición
-        const idxCode = header.findIndex(h => ['codigo','code','articulo','sku','item'].includes(h));
-        const idxProduct = header.findIndex(h => ['producto','descripcion','articulo','columna2','product'].includes(h));
-        const idxCategory = header.findIndex(h => ['categoria','category','familia'].includes(h));
-        const idxLocation = header.findIndex(h => ['ubicacion','location','rack','anaquel'].includes(h));
-        const idxQty = header.findIndex(h => ['existencia','existencia_inicial','cantidad','stock'].includes(h));
-        const idxMin = header.findIndex(h => ['minimo','min'].includes(h));
-        const idxMax = header.findIndex(h => ['maximo','max'].includes(h));
-        const idxProvider = header.findIndex(h => ['proveedor','provider'].includes(h));
-
-        let imported = 0;
-        let skipped = 0;
-
-        const usedCodes = new Set();
-        const nuevos = dataRows.map((row, idx) => {
-          const rawProduct = idxProduct >= 0 ? row[idxProduct] : '';
-          const rawCode = idxCode >= 0 ? row[idxCode] : '';
-          const qty = idxQty >= 0 ? row[idxQty] : 0;
-
-          const product = String(rawProduct || rawCode || '').trim();
-          let code = String(rawCode || '').trim();
-
-          // Saltar filas vacías
-          if(!product && !code){
-            skipped++;
-            return null;
-          }
-
-          // Si no hay código, generar uno estable para evitar choques y permitir importar
-          if(!code){
-            const base = product
-              .toUpperCase()
-              .replace(/[^A-Z0-9]+/g, '-')
-              .replace(/^-+|-+$/g, '')
-              .slice(0, 24) || 'ITEM';
-            code = 'IMP-' + base + '-' + String(idx + 1).padStart(4, '0');
-          }
-
-          // Si viene repetido en el mismo archivo, agregar sufijo
-          let finalCode = code;
-          let suffix = 2;
-          while(usedCodes.has(finalCode)){
-            finalCode = code + '-' + suffix;
-            suffix++;
-          }
-          usedCodes.add(finalCode);
-
-          imported++;
-          return {
-            id: Date.now() + idx + Math.floor(Math.random()*100000),
-            code: finalCode,
-            product: product,
-            category: idxCategory >= 0 ? String(row[idxCategory] || '').trim() : '',
-            location: idxLocation >= 0 ? String(row[idxLocation] || '').trim() : '',
-            initialQty: Number(qty || 0),
-            min: idxMin >= 0 ? Number(row[idxMin] || 0) : 0,
-            max: idxMax >= 0 ? Number(row[idxMax] || 0) : 0,
-            provider: idxProvider >= 0 ? String(row[idxProvider] || '').trim() : ''
-          };
-        }).filter(Boolean);
-
-        try{
-          if(nuevos.length === 0){
-            alert('No se encontraron productos válidos para importar.');
-            return;
-          }
-
-          if(replace){
-            // Reemplazo total del inventario maestro actual.
-            for(const item of [...state.inventory]){
-              await borrarRegistroSupabase('inventory', item.id);
+      try{
+        if(type === 'issued'){
+          const balance = balanceForInvoice(item);
+          const existingPayments = paymentsForInvoice(item.id);
+          if(balance > 0){
+            const ok = confirm('Esto registrará un pago por el saldo restante para liquidar la factura. ¿Continuar?');
+            if(!ok) return;
+            const pay = {
+              id:uid(), invoiceId:item.id, paymentDate:hoy(), amount:balance,
+              paymentMethod:'Liquidación', complementIssued:String(item.paymentMethod||'PUE').toUpperCase()==='PUE',
+              complementDate:String(item.paymentMethod||'PUE').toUpperCase()==='PUE' ? hoy() : '', notes:'Liquidación rápida'
+            };
+            if(supabaseClient && !String(id).startsWith('local_')){
+              await insertRemote('payments', pay);
+              await loadRemote();
+            }else{
+              state.payments.unshift(pay);
+              item.paid = true;
+            }
+          }else{
+            if(existingPayments.length){
+              alert('Esta factura tiene pagos registrados. Para dejarla pendiente borra primero los pagos/abonos relacionados.');
+              return;
+            }
+            item.paid = false;
+            item.paymentDate = '';
+            if(supabaseClient && !String(id).startsWith('local_')){
+              await updateRemote(type,id,{paid:false,paymentDate:''});
+              await loadRemote();
             }
           }
-
-          for(const item of nuevos){
-            await insertarProductoSupabase(item);
+        }else{
+          item.paid = !item.paid;
+          item.paymentDate = item.paid ? (item.paymentDate || hoy()) : '';
+          if(supabaseClient && !String(id).startsWith('local_')){
+            await updateRemote(type,id,{paid:item.paid,paymentDate:item.paymentDate});
+            await loadRemote();
           }
-
-          await cargarAlmacenSupabase(false);
-          state.importInfo = {
-            rowsRead: dataRows.length,
-            imported,
-            skipped,
-            message: 'Encabezados detectados en la fila ' + (headerRowIndex + 1) + '. Inventario enviado correctamente a Supabase.'
-          };
-          guardar();
-          renderMain();
-          alert('Importación terminada. Importados: ' + imported + ' | Omitidos: ' + skipped);
-        }catch(syncErr){
-          console.error(syncErr);
-          alert('Se leyó el archivo, pero no se pudo guardar el inventario en Supabase. Revisa si el archivo trae datos repetidos o vacíos.');
-        }finally{
-          iniciarAutoSync();
         }
-      }catch(err){
-        state.importInfo = {
-          rowsRead:0,
-          imported:0,
-          skipped:0,
-          message:'No se pudo leer el archivo. Si sigue fallando, guarda tu Excel como CSV y vuelve a importarlo.'
-        };
-        guardar();
-        renderMain();
-        alert('No se pudo importar el archivo. Si sigue fallando, guárdalo como CSV.');
-        iniciarAutoSync();
-      }
-    };
-    if(file.name.toLowerCase().endsWith('.csv')){
-      reader.readAsBinaryString(file);
-    }else{
-      reader.readAsArrayBuffer(file);
-    }
-  };
-
-
-  const purchaseCalcForm = main.querySelector('#purchaseCalcForm');
-  if(purchaseCalcForm) purchaseCalcForm.onsubmit = (e)=>{
-    e.preventDefault();
-    const fd = new FormData(purchaseCalcForm);
-    const monthlyDemand = Number(fd.get('monthlyDemand') || 0);
-    const leadDays = Number(fd.get('leadDays') || 0);
-    const safetyDays = Number(fd.get('safetyDays') || 0);
-    const reviewDays = Number(fd.get('reviewDays') || 0);
-    const dailyDemand = +(monthlyDemand / 30).toFixed(2);
-    const safetyStock = +(dailyDemand * safetyDays).toFixed(2);
-    const minSuggested = Math.ceil(dailyDemand * (leadDays + safetyDays));
-    const maxSuggested = Math.ceil(minSuggested + (dailyDemand * reviewDays));
-    state.purchaseCalc = {
-      productId: fd.get('productId'),
-      monthlyDemand: fd.get('monthlyDemand'),
-      leadDays: fd.get('leadDays'),
-      safetyDays: fd.get('safetyDays'),
-      reviewDays: fd.get('reviewDays'),
-      result: { dailyDemand, safetyStock, minSuggested, maxSuggested }
-    };
-    guardar(); renderMain();
-  };
-
-  const applyMinMaxBtn = main.querySelector('#applyMinMaxBtn');
-  if(applyMinMaxBtn) applyMinMaxBtn.onclick = async ()=>{
-    const calc = state.purchaseCalc || {};
-    if(!calc.productId || !calc.result){
-      alert('Primero calcula los valores.');
-      return;
-    }
-    try{
-      await actualizarProductoSupabase(calc.productId, {
-        min: Number(calc.result.minSuggested || 0),
-        max: Number(calc.result.maxSuggested || 0)
-      });
-      await cargarAlmacenSupabase(false);
-      guardar();
-      renderMain();
-      alert('Mínimo y máximo aplicados al producto.');
-    }catch(err){
-      console.error(err);
-      alert('No se pudo actualizar el producto en Supabase.');
-    }
-  };
-
-
-
-  const addOrderItemBtn = main.querySelector('#addOrderItemBtn');
-  if(addOrderItemBtn) addOrderItemBtn.onclick = ()=>{
-    if(session.role !== 'administrador'){
-      alert('Solo administración puede capturar pedidos.');
-      return;
-    }
-    const form = document.getElementById('orderDraftForm');
-    const fd = new FormData(form);
-    const productId = String(fd.get('productId') || '').trim();
-    const qty = Number(fd.get('qty') || 0);
-    if(!productId || qty <= 0){
-      alert('Selecciona producto y cantidad.');
-      return;
-    }
-    const product = nombreProducto(productId);
-    state.orderDraft = {
-      date: fd.get('date') || hoy(),
-      client: fd.get('client') || '',
-      notes: fd.get('notes') || '',
-      items: [...((state.orderDraft && Array.isArray(state.orderDraft.items)) ? state.orderDraft.items : []), { productId, product, qty }]
-    };
-    guardar();
-    renderMain();
-    alert('Partida agregada al pedido.');
-  };
-
-  const orderDraftForm = main.querySelector('#orderDraftForm');
-  if(orderDraftForm) orderDraftForm.onsubmit = async (e)=>{
-    e.preventDefault();
-    if(session.role !== 'administrador'){
-      alert('Solo administración puede guardar pedidos.');
-      return;
-    }
-
-    try{
-      const fd = new FormData(orderDraftForm);
-      const client = String(fd.get('client') || '').trim();
-      const date = fd.get('date') || hoy();
-      const notes = fd.get('notes') || '';
-
-      let draftItems = [...((state.orderDraft && Array.isArray(state.orderDraft.items)) ? state.orderDraft.items : [])];
-
-      const currentProductId = String(fd.get('productId') || '').trim();
-      const currentQty = Number(fd.get('qty') || 0);
-      if(currentProductId && currentQty > 0){
-        const alreadyExistsSameLine = draftItems.some(it =>
-          String(it.productId) === currentProductId && Number(it.qty) === currentQty
-        );
-        if(!alreadyExistsSameLine){
-          draftItems.push({
-            productId: currentProductId,
-            product: nombreProducto(currentProductId),
-            qty: currentQty
-          });
-        }
-      }
-
-      if(!client){
-        alert('Captura el cliente.');
-        return;
-      }
-      if(draftItems.length === 0){
-        alert('Agrega al menos una partida o selecciona producto y cantidad.');
-        return;
-      }
-
-      const orderToSave = {
-        folio: siguienteFolioPedido(),
-        date: date,
-        client: client,
-        notes: notes,
-        status: 'Pendiente almacén',
-        items: draftItems
-      };
-
-      await guardarPedidoSupabase(orderToSave);
-      state.orderDraft = { date:hoy(), client:'', notes:'', items:[] };
-      await cargarPedidosSupabase();
-      guardar();
-      renderMain();
-      alert('Pedido guardado en Supabase.');
-    }catch(err){
-      console.error(err);
-      alert('No se pudo guardar el pedido en Supabase.');
-    }
-  };
-
-  main.querySelectorAll('[data-del-draft-item]').forEach(btn=>{
-    btn.onclick = ()=>{
-      const idx = Number(btn.dataset.delDraftItem);
-      if(!state.orderDraft || !Array.isArray(state.orderDraft.items)) state.orderDraft = { date:hoy(), client:'', notes:'', items:[] };
-      state.orderDraft.items = (state.orderDraft.items || []).filter((_,i)=>i!==idx);
-      guardar();
-      renderMain();
-    };
-  });
-
-  main.querySelectorAll('[data-review-order]').forEach(btn=>{
-    btn.onclick = async ()=>{
-      const id = Number(btn.dataset.reviewOrder);
-      const order = (state.orders || []).find(x => Number(x.id) === id);
-      if(!order) return;
-      const complete = order.items.every(it => stockDisponible(it.productId) >= Number(it.qty));
-      const newStatus = complete ? 'Listo para surtir' : 'Incompleto';
-      try{
-        await actualizarPedidoSupabase(id, { status: newStatus });
-        await cargarPedidosSupabase();
-        guardar();
-        renderMain();
+        saveState();
+        render();
       }catch(err){
         console.error(err);
-        alert('No se pudo actualizar el pedido en Supabase.');
+        alert('No pude actualizar.');
       }
     };
   });
 
-  main.querySelectorAll('[data-pack-order]').forEach(btn=>{
-    btn.onclick = async ()=>{
-      const id = Number(btn.dataset.packOrder);
-      const order = (state.orders || []).find(x => Number(x.id) === id);
-      if(!order) return;
-      const complete = order.items.every(it => stockDisponible(it.productId) >= Number(it.qty));
-      if(!complete){
-        alert('No hay suficiente inventario para empacar completo este pedido.');
-        return;
+  document.querySelectorAll('[data-toggle-service]' ).forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.toggleService;
+      const item = state.services.find(x => String(x.id) === String(id));
+      if(!item) return;
+      item.invoiced = !item.invoiced;
+      if(item.invoiced && !item.invoiceNumber){
+        item.invoiceNumber = prompt('Número de factura relacionada, si aplica:', '') || '';
       }
       try{
-        for(const it of order.items){
-          await registrarSalidaSupabase({
-            date: hoy(),
-            area: 'Pedido ' + order.folio,
-            reference: order.folio,
-            productId: it.productId,
-            qty: Number(it.qty || 0),
-            doubleCheck: true
-          });
+        if(supabaseClient && !String(id).startsWith('local_')){
+          await updateRemote('services',id,{invoiced:item.invoiced,invoiceNumber:item.invoiceNumber});
+          await loadRemote();
         }
-        await actualizarPedidoSupabase(id, { status:'Empacado' });
-        await cargarAlmacenSupabase(false);
-        await cargarPedidosSupabase();
-        guardar();
-        renderMain();
+        saveState();
+        render();
       }catch(err){
         console.error(err);
-        alert('No se pudo empacar el pedido en Supabase.');
+        alert('No pude actualizar.');
       }
     };
   });
 
-  main.querySelectorAll('[data-invoice-order]').forEach(btn=>{
-    btn.onclick = async ()=>{
-      const id = Number(btn.dataset.invoiceOrder);
+  document.querySelectorAll('[data-order-status]').forEach(select => {
+    select.onchange = async () => {
+      const id = select.dataset.orderStatus;
+      const item = state.orders.find(x => String(x.id) === String(id));
+      if(!item) return;
+      item.status = select.value;
       try{
-        await actualizarPedidoSupabase(id, { status:'Facturado', invoiced:true });
-        await cargarPedidosSupabase();
-        guardar();
-        renderMain();
+        if(supabaseClient && !String(id).startsWith('local_')){
+          await updateRemote('orders', id, {status:item.status});
+          await loadRemote();
+        }
+        saveState();
+        render();
       }catch(err){
         console.error(err);
-        alert('No se pudo marcar como facturado en Supabase.');
+        alert('No pude actualizar el pedido.');
       }
     };
   });
 
-  main.querySelectorAll('[data-cancel-order]').forEach(btn=>{
-    btn.onclick = async ()=>{
-      const id = Number(btn.dataset.cancelOrder);
+  document.querySelectorAll('[data-delete]').forEach(btn => {
+    btn.onclick = async () => {
+      const type = btn.dataset.delete;
+      const id = btn.dataset.id;
+      if(!confirm('¿Borrar este registro?')) return;
       try{
-        await actualizarPedidoSupabase(id, { status:'Cancelado' });
-        await cargarPedidosSupabase();
-        guardar();
-        renderMain();
+        if(supabaseClient && !String(id).startsWith('local_')){
+          await deleteRemote(type,id);
+          await loadRemote();
+        }else{
+          state[type] = state[type].filter(x => String(x.id) !== String(id));
+        }
+        saveState();
+        render();
       }catch(err){
         console.error(err);
-        alert('No se pudo cancelar el pedido en Supabase.');
-      }
-    };
-  });
-
-
-  const entryForm = main.querySelector('#entryForm');
-  if(entryForm) entryForm.onsubmit = async (e)=>{
-    e.preventDefault();
-    const fd = new FormData(entryForm);
-
-    let productId = String(fd.get('productId') || '').trim();
-    let productName = String(fd.get('product') || '').trim();
-    const supplier = String(fd.get('supplier') || '').trim();
-    const category = String(fd.get('category') || '').trim();
-    const location = String(fd.get('location') || '').trim();
-
-    try{
-      if(productId){
-        const invItem = (state.inventory || []).find(x => String(x.id) === productId);
-        if(invItem){
-          productName = invItem.product;
-        }
-      }
-
-      if(!productId && productName){
-        const existing = (state.inventory || []).find(x =>
-          String(x.product || '').trim().toLowerCase() === productName.toLowerCase()
-        );
-        if(existing){
-          productId = String(existing.id);
-          productName = existing.product;
-        }
-      }
-
-      if(!productId && productName){
-        const codeBase = productName
-          .toUpperCase()
-          .replace(/[^A-Z0-9]+/g,' ')
-          .trim()
-          .split(' ')
-          .slice(0,2)
-          .join('-') || 'PROD';
-
-        const saved = await insertarProductoSupabase({
-          code:'AUTO-' + codeBase,
-          product:productName,
-          category: category || 'Sin categoría',
-          location: location || 'Sin ubicación',
-          initialQty:0,
-          min:0,
-          max:0,
-          provider:supplier || ''
-        });
-        productId = String(saved.id);
-      }
-
-      await registrarEntradaSupabase({
-        date: fd.get('date'),
-        supplier: supplier,
-        productId: productId || '',
-        qty: Number(fd.get('qty')||0),
-        sameDay: !!fd.get('sameDay')
-      });
-
-      await cargarAlmacenSupabase(false);
-      guardar();
-      renderMain();
-      alert('Entrada registrada en Supabase.');
-    }catch(err){
-      console.error(err);
-      alert('No se pudo registrar la entrada en Supabase.');
-    }
-  };
-
-  const outputForm = main.querySelector('#outputForm');
-  if(outputForm) outputForm.onsubmit = async (e)=>{
-    e.preventDefault();
-    const fd = new FormData(outputForm);
-    let productId = String(fd.get('productId') || '').trim();
-    let productName = String(fd.get('product') || '').trim();
-
-    try{
-      if(productId){
-        const invItem = (state.inventory || []).find(x => String(x.id) === String(productId));
-        if(invItem){
-          productName = invItem.product;
-        }
-      }
-
-      if(!productId && productName){
-        const existing = (state.inventory || []).find(x =>
-          String(x.product || '').trim().toLowerCase() === productName.toLowerCase()
-        );
-        if(existing){
-          productId = String(existing.id);
-        }
-      }
-
-      if(!productId){
-        alert('Selecciona un producto del inventario o escribe uno que ya exista.');
-        return;
-      }
-
-      await registrarSalidaSupabase({
-        date: fd.get('date'),
-        area: fd.get('area'),
-        productId: productId || '',
-        qty: Number(fd.get('qty')||0),
-        doubleCheck: !!fd.get('doubleCheck')
-      });
-
-      await cargarAlmacenSupabase(false);
-      guardar();
-      renderMain();
-      alert('Salida registrada en Supabase.');
-    }catch(err){
-      console.error(err);
-      alert('No se pudo registrar la salida en Supabase.');
-    }
-  };
-
-  const countForm = main.querySelector('#countForm');
-  if(countForm) countForm.onsubmit = (e)=>{
-    e.preventDefault();
-    const fd = new FormData(countForm);
-    state.counts.unshift({
-      id:Date.now(),
-      date:fd.get('date'),
-      zone:fd.get('zone'),
-      systemQty:Number(fd.get('systemQty')||0),
-      physicalQty:Number(fd.get('physicalQty')||0),
-      corrected24h:!!fd.get('corrected24h')
-    });
-    guardar(); renderMain();
-  };
-
-  const salesForm = main.querySelector('#salesForm');
-  if(salesForm) salesForm.onsubmit = async (e)=>{
-    e.preventDefault();
-    detenerAutoSync();
-    try{
-      const fd = new FormData(salesForm);
-      await guardarVentaSupabase({
-        date: fd.get('date'),
-        client: fd.get('client'),
-        seller: fd.get('seller') || 'Vendedor 1',
-        contact: fd.get('contact'),
-        type: fd.get('type'),
-        amount: Number(fd.get('amount')||0),
-        status: fd.get('status'),
-        nextFollowUp: fd.get('nextFollowUp'),
-        priority: fd.get('priority'),
-        notes: fd.get('notes'),
-        followUp48h: !!fd.get('followUp48h')
-      });
-      await cargarVentasSupabase(false);
-      guardar();
-      renderMain();
-      alert('Venta guardada en Supabase.');
-    }catch(err){
-      console.error(err);
-      alert('No se pudo guardar la venta en Supabase.');
-    }finally{
-      iniciarAutoSync();
-    }
-  };
-
-  const colForm = main.querySelector('#colForm');
-  if(colForm) colForm.onsubmit = async (e)=>{
-    e.preventDefault();
-    detenerAutoSync();
-    try{
-      const fd = new FormData(colForm);
-      await guardarCobranzaSupabase({
-        invoice: fd.get('invoice'),
-        client: fd.get('client'),
-        amount: Number(fd.get('amount')||0),
-        dueDate: fd.get('dueDate'),
-        status: fd.get('status'),
-        paid: !!fd.get('paid'),
-        contactedBeforeDue: !!fd.get('contactedBeforeDue')
-      });
-      await cargarCobranzaSupabase(false);
-      guardar();
-      renderMain();
-      alert('Factura guardada en Supabase.');
-    }catch(err){
-      console.error(err);
-      alert('No se pudo guardar la factura en Supabase.');
-    }finally{
-      iniciarAutoSync();
-    }
-  };
-
-  main.querySelectorAll('[data-del]').forEach(btn=>{
-    btn.onclick = async ()=>{
-      const id = Number(btn.dataset.id);
-      const type = btn.dataset.del;
-      try{
-        if(type==='inventory'){
-          if(session.role !== 'administrador'){
-            alert('Solo el administrador puede borrar productos del inventario.');
-            return;
-          }
-          await borrarRegistroSupabase('inventory', id);
-          await cargarAlmacenSupabase(false);
-        } else if(type==='entry'){
-          await borrarRegistroSupabase('warehouse_entries', id);
-          await cargarAlmacenSupabase(false);
-        } else if(type==='output'){
-          await borrarRegistroSupabase('warehouse_outputs', id);
-          await cargarAlmacenSupabase(false);
-        } else if(type==='count'){
-          state.counts = state.counts.filter(x=>x.id!==id);
-        } else if(type==='sale'){
-          await borrarRegistroSupabase('sales', id);
-          await cargarVentasSupabase(false);
-        } else if(type==='collection'){
-          await borrarRegistroSupabase('collections', id);
-          await cargarCobranzaSupabase(false);
-        }
-        guardar();
-        renderMain();
-      }catch(err){
-        console.error(err);
-        alert('No se pudo borrar el registro en Supabase.');
+        alert('No pude borrar.');
       }
     };
   });
 }
 
-Promise.all([cargarPedidosSupabase(false), cargarAlmacenSupabase(false), cargarVentasSupabase(false), cargarCobranzaSupabase(false)]).finally(() => {
-  render();
-});
+function autoCalc(type){
+  const sub = document.getElementById(type+'Subtotal');
+  const iva = document.getElementById(type+'Iva');
+  const total = document.getElementById(type+'Total');
+  if(!sub || !iva || !total) return;
+
+  function update(){
+    const ivaCalc = calcIva(sub.value);
+    iva.value = ivaCalc;
+    total.value = calcTotal(sub.value, ivaCalc);
+  }
+  sub.addEventListener('input', update);
+  iva.addEventListener('input', () => total.value = calcTotal(sub.value, iva.value));
+}
+
+async function addItem(type,item){
+  try{
+    if(supabaseClient){
+      await insertRemote(type,item);
+      await loadRemote();
+    }else{
+      state[type].unshift(item);
+    }
+    saveState();
+    render();
+  }catch(err){
+    console.error(err);
+    alert('No pude guardar. Si estás usando Supabase, revisa SQL, URL, key y permisos.');
+  }
+}
+
+const SUPABASE_SQL = `-- SotoMed Control V1.5 / acceso vendedores + pedidos
+-- Ejecuta esto en Supabase > SQL Editor.
+-- Compatible con V1.4: conserva facturas, pagos, servicios y agrega tabla de pedidos.
+-- Para esta V1 rápida se agregan políticas abiertas para anon.
+-- Después conviene meter login real y políticas por usuario con Supabase Auth.
+
+create table if not exists public.sotomed_issued_invoices (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  invoice_date date not null,
+  client text,
+  invoice_number text,
+  subtotal numeric(12,2) not null default 0,
+  iva numeric(12,2) not null default 0,
+  total numeric(12,2) not null default 0,
+  paid boolean not null default false,
+  payment_date date,
+  notes text
+);
+
+alter table public.sotomed_issued_invoices
+add column if not exists payment_method text not null default 'PUE';
+
+alter table public.sotomed_issued_invoices
+add column if not exists due_date date;
+
+create table if not exists public.sotomed_received_invoices (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  invoice_date date not null,
+  provider text,
+  invoice_number text,
+  subtotal numeric(12,2) not null default 0,
+  iva numeric(12,2) not null default 0,
+  total numeric(12,2) not null default 0,
+  paid boolean not null default false,
+  payment_date date,
+  notes text
+);
+
+create table if not exists public.sotomed_service_sheets (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  service_date date not null,
+  client text,
+  service_number text,
+  equipment text,
+  work_done text,
+  amount numeric(12,2) not null default 0,
+  invoiced boolean not null default false,
+  invoice_number text
+);
+
+create table if not exists public.sotomed_invoice_payments (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  invoice_id bigint not null references public.sotomed_issued_invoices(id) on delete cascade,
+  payment_date date not null,
+  amount numeric(12,2) not null default 0,
+  payment_method text,
+  complement_issued boolean not null default false,
+  complement_date date,
+  notes text
+);
+
+create table if not exists public.sotomed_orders (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  order_date date not null,
+  seller text,
+  client text,
+  product text,
+  qty numeric(12,2) not null default 0,
+  notes text,
+  status text not null default 'Pendiente almacén'
+);
+
+alter table public.sotomed_issued_invoices enable row level security;
+alter table public.sotomed_received_invoices enable row level security;
+alter table public.sotomed_service_sheets enable row level security;
+alter table public.sotomed_invoice_payments enable row level security;
+alter table public.sotomed_orders enable row level security;
+
+drop policy if exists "sotomed issued anon all" on public.sotomed_issued_invoices;
+drop policy if exists "sotomed received anon all" on public.sotomed_received_invoices;
+drop policy if exists "sotomed services anon all" on public.sotomed_service_sheets;
+drop policy if exists "sotomed payments anon all" on public.sotomed_invoice_payments;
+drop policy if exists "sotomed orders anon all" on public.sotomed_orders;
+
+create policy "sotomed issued anon all"
+on public.sotomed_issued_invoices
+for all
+to anon
+using (true)
+with check (true);
+
+create policy "sotomed received anon all"
+on public.sotomed_received_invoices
+for all
+to anon
+using (true)
+with check (true);
+
+create policy "sotomed services anon all"
+on public.sotomed_service_sheets
+for all
+to anon
+using (true)
+with check (true);
+
+create policy "sotomed payments anon all"
+on public.sotomed_invoice_payments
+for all
+to anon
+using (true)
+with check (true);
+
+create policy "sotomed orders anon all"
+on public.sotomed_orders
+for all
+to anon
+using (true)
+with check (true);
+
+create index if not exists idx_sotomed_issued_invoice_date on public.sotomed_issued_invoices(invoice_date);
+create index if not exists idx_sotomed_issued_due_date on public.sotomed_issued_invoices(due_date);
+create index if not exists idx_sotomed_received_invoice_date on public.sotomed_received_invoices(invoice_date);
+create index if not exists idx_sotomed_service_date on public.sotomed_service_sheets(service_date);
+create index if not exists idx_sotomed_payments_invoice_id on public.sotomed_invoice_payments(invoice_id);
+create index if not exists idx_sotomed_payments_payment_date on public.sotomed_invoice_payments(payment_date);
+create index if not exists idx_sotomed_orders_order_date on public.sotomed_orders(order_date);
+create index if not exists idx_sotomed_orders_status on public.sotomed_orders(status);`;
+
+connectSupabase();
+startAutoSync();
+loadRemote(false).then(render);
 </script>
 </body>
 </html>
