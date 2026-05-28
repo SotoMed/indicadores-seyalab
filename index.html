@@ -107,9 +107,11 @@ const STORAGE_KEY = 'seyalab_simple_inventario_v2';
 
 const roles = {
   director: { label:'Director', desc:'Solo ve el resumen.', tabs:['dashboard'] },
-  administrador: { label:'Administrador', desc:'Administra inventario, configuraciones y movimientos.', tabs:['dashboard','pedidos','configurar','inventario','compras','almacen','ventas','cobranza'] },
+  administrador: { label:'Administración empresa', desc:'Administra la operación de Seyalab: pedidos, ventas, cobranza e indicadores administrativos.', tabs:['dashboard','admin_empresa','pedidos','ventas','cobranza'] },
   almacen: { label:'Almacén', desc:'Revisa pedidos y registra movimientos de almacén.', tabs:['pedidos','almacen'] },
-  ventas: { label:'Vendedores', desc:'Captura indicadores comerciales y manda pedidos al almacén.', tabs:['pedidos','ventas'] }
+  ventas1: { label:'Vendedor 1', desc:'Captura sus indicadores comerciales y manda sus pedidos al almacén.', tabs:['pedidos','ventas'] },
+  ventas2: { label:'Vendedor 2', desc:'Captura sus indicadores comerciales y manda sus pedidos al almacén.', tabs:['pedidos','ventas'] },
+  admin_programa: { label:'Admin. programa', desc:'Configura el programa: indicadores visibles, notas, inventario maestro y parámetros de compras.', tabs:['configurar','inventario','compras'] }
 };
 
 function hoy(){ return new Date().toISOString().slice(0,10); }
@@ -156,11 +158,33 @@ const seed = {
   collections: [
     {id:1,invoice:'FAC-001',client:'Laboratorio Vida',amount:85000,dueDate:hoy(),status:'Pendiente',paid:false,contactedBeforeDue:true}
   ],
+  partialPaymentInvoices: [
+    {id:1,invoice:'FAC-PPD-001',client:'Laboratorio Vida',invoiceDate:hoy(),totalAmount:85000,dueDate:hoy(),paymentCondition:'3 pagos',status:'Parcial',notes:'Ejemplo de control de pagos parciales'}
+  ],
+  partialInvoicePayments: [
+    {id:1,invoiceId:1,paymentDate:hoy(),amount:25000,method:'Transferencia',reference:'Pago ejemplo',complementIssued:false,complementDate:'',notes:'Primer abono'}
+  ],
   orders: [],
   orderDraft: { date:hoy(), client:'', notes:'', items:[] },
   dashboard: {
     visible:['salesAmount','conversion','entriesSameDay','overduePct','itemsCount','criticalItems'],
     notes:[]
+  },
+  programSettings: {
+    passwords: {
+      administrador: '9wkmry1d',
+      admin_programa: '9wkmry1d',
+      ventas1: 'vendedor1',
+      ventas2: 'vendedor2'
+    },
+    areaIndicators: {
+      director: ['salesAmount','conversion','entriesSameDay','overduePct','itemsCount','criticalItems'],
+      admin_empresa: ['porFacturar','porCobrar','cobranzaVencida','ventasCerradas','saldoParcialidades'],
+      ventas: ['ventasCerradasV1','ventasCerradasV2','seguimientos','registros'],
+      ventas1: ['ventasCerradas','seguimientos','registros','conversion'],
+      ventas2: ['ventasCerradas','seguimientos','registros','conversion'],
+      almacen: ['entradasHoy','salidasHoy','productosCriticos','stockTotal']
+    }
   },
   purchaseCalc: {
     productId:'',
@@ -174,8 +198,23 @@ const seed = {
   importInfo: null
 };
 
-const ADMIN_PASSWORD = '9wkmry1d';
-const SELLER_PASSWORD = 'pedidos123';
+const DEFAULT_PASSWORDS = { administrador:'9wkmry1d', admin_programa:'9wkmry1d', ventas1:'vendedor1', ventas2:'vendedor2' };
+
+const tabLabels = {
+  dashboard: 'Dashboard',
+  admin_empresa: 'Administración empresa',
+  pedidos: 'Pedidos',
+  configurar: 'Admin. programa',
+  inventario: 'Inventario',
+  compras: 'Compras',
+  almacen: 'Almacén',
+  ventas: 'Ventas / indicadores',
+  cobranza: 'Cobranza',
+  pagos_parciales: 'Pagos parciales'
+};
+function tabLabel(tab){
+  return tabLabels[tab] || (tab.charAt(0).toUpperCase()+tab.slice(1));
+}
 let state = cargar();
 let session = { role:'director', tab:'dashboard' };
 
@@ -193,15 +232,74 @@ function tabNecesitaVentas(tab){
   return tab === 'ventas' || tab === 'dashboard';
 }
 
+function tabNecesitaPagosParciales(tab){
+  return tab === 'cobranza' || tab === 'admin_empresa' || tab === 'dashboard';
+}
+
 function tabCargaAlmacen(tab){
   return tab === 'inventario' || tab === 'almacen' || tab === 'compras' || tab === 'pedidos' || tab === 'dashboard';
 }
 
+function esRolVendedor(role = session.role){
+  return role === 'ventas1' || role === 'ventas2';
+}
+
+function vendedorDeRol(role = session.role){
+  if(role === 'ventas1') return 'Vendedor 1';
+  if(role === 'ventas2') return 'Vendedor 2';
+  return '';
+}
+
+function areaVentasActual(){
+  if(session.role === 'ventas1') return 'ventas1';
+  if(session.role === 'ventas2') return 'ventas2';
+  return 'ventas';
+}
+
+function hayFormularioConCaptura(){
+  return !!document.querySelector('#main form[data-dirty="true"]');
+}
+
 function usuarioEditandoFormulario(){
   const el = document.activeElement;
-  if(!el) return false;
-  const tag = (el.tagName || '').toLowerCase();
-  return tag === 'input' || tag === 'textarea' || tag === 'select';
+  if(el){
+    const tag = (el.tagName || '').toLowerCase();
+    if(tag === 'input' || tag === 'textarea' || tag === 'select'){
+      return true;
+    }
+  }
+  return hayFormularioConCaptura();
+}
+
+function activarProteccionFormularios(){
+  const main = document.getElementById('main');
+  if(!main) return;
+
+  main.querySelectorAll('form').forEach(form => {
+    if(form.dataset.proteccionActiva === 'true') return;
+    form.dataset.proteccionActiva = 'true';
+
+    form.querySelectorAll('input, textarea, select').forEach(el => {
+      const tipo = (el.type || '').toLowerCase();
+      if(tipo === 'hidden' || tipo === 'file') return;
+
+      const marcarCaptura = () => {
+        form.dataset.dirty = 'true';
+      };
+
+      el.addEventListener('input', marcarCaptura);
+      el.addEventListener('change', marcarCaptura);
+    });
+
+    form.addEventListener('submit', () => {
+      form.dataset.dirty = 'false';
+    }, {capture:true});
+  });
+}
+
+function confirmarRefrescoSiHayCaptura(){
+  if(!hayFormularioConCaptura()) return true;
+  return window.confirm('Hay datos escritos sin guardar. Si actualizas ahora, se pueden perder. ¿Quieres actualizar de todos modos?');
 }
 
 function iniciarAutoSync(){
@@ -217,6 +315,9 @@ function iniciarAutoSync(){
     if(tabNecesitaVentas(session.tab)){
       await cargarVentasSupabase(shouldRender);
     }
+    if(tabNecesitaPagosParciales(session.tab)){
+      await cargarPagosParcialesSupabase(shouldRender);
+    }
   }, 3000);
 }
 
@@ -227,9 +328,11 @@ function detenerAutoSync(){
   }
 }
 
+cargarConfiguracionPrograma();
 cargarPedidosSupabase();
 cargarAlmacenSupabase();
 cargarVentasSupabase();
+cargarPagosParcialesSupabase();
 iniciarAutoSync();
 
 window.addEventListener('focus', async () => {
@@ -237,6 +340,7 @@ window.addEventListener('focus', async () => {
   await cargarPedidosSupabase(shouldRender);
   await cargarAlmacenSupabase(shouldRender);
   await cargarVentasSupabase(shouldRender);
+  await cargarPagosParcialesSupabase(shouldRender);
 });
 
 function cargar(){
@@ -256,6 +360,14 @@ function cargar(){
       counts: Array.isArray(parsed.counts) ? parsed.counts : copiar(seed).counts,
       sales: Array.isArray(parsed.sales) ? parsed.sales : copiar(seed).sales,
       collections: Array.isArray(parsed.collections) ? parsed.collections : copiar(seed).collections,
+      partialPaymentInvoices: Array.isArray(parsed.partialPaymentInvoices) ? parsed.partialPaymentInvoices : copiar(seed).partialPaymentInvoices,
+      partialInvoicePayments: Array.isArray(parsed.partialInvoicePayments) ? parsed.partialInvoicePayments : copiar(seed).partialInvoicePayments,
+      programSettings: {
+        ...copiar(seed).programSettings,
+        ...(parsed.programSettings || {}),
+        passwords: { ...copiar(seed).programSettings.passwords, ...((parsed.programSettings || {}).passwords || {}) },
+        areaIndicators: { ...copiar(seed).programSettings.areaIndicators, ...((parsed.programSettings || {}).areaIndicators || {}) }
+      },
       orders: Array.isArray(parsed.orders) ? parsed.orders : [],
     };
   }catch(e){
@@ -264,6 +376,62 @@ function cargar(){
 }
 function guardar(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function programSettings(){
+  state.programSettings = state.programSettings || copiar(seed).programSettings;
+  state.programSettings.passwords = { ...DEFAULT_PASSWORDS, ...(state.programSettings.passwords || {}) };
+  if(state.programSettings.passwords.ventas && !state.programSettings.passwords.ventas1) state.programSettings.passwords.ventas1 = state.programSettings.passwords.ventas;
+  if(state.programSettings.passwords.ventas && !state.programSettings.passwords.ventas2) state.programSettings.passwords.ventas2 = state.programSettings.passwords.ventas;
+  state.programSettings.areaIndicators = { ...copiar(seed).programSettings.areaIndicators, ...(state.programSettings.areaIndicators || {}) };
+  return state.programSettings;
+}
+
+function passwordRol(role){
+  return (programSettings().passwords || {})[role] || DEFAULT_PASSWORDS[role] || '';
+}
+
+function indicadoresVisibles(area, fallback){
+  const arr = (programSettings().areaIndicators || {})[area];
+  return Array.isArray(arr) && arr.length ? arr : fallback;
+}
+
+async function guardarConfiguracionProgramaSupabase(){
+  guardar();
+  try{
+    const { error } = await supabaseClient
+      .from('app_settings')
+      .upsert({ key:'program_settings', value: programSettings() }, { onConflict:'key' });
+    if(error) console.error('No se pudo guardar configuración del programa:', error);
+  }catch(err){
+    console.error('Error guardando configuración del programa:', err);
+  }
+}
+
+async function cargarConfiguracionPrograma(shouldRender = false){
+  try{
+    const { data, error } = await supabaseClient
+      .from('app_settings')
+      .select('value')
+      .eq('key','program_settings')
+      .maybeSingle();
+    if(error){
+      console.error('No se pudo cargar configuración del programa:', error);
+      return;
+    }
+    if(data && data.value){
+      state.programSettings = {
+        ...copiar(seed).programSettings,
+        ...data.value,
+        passwords: { ...copiar(seed).programSettings.passwords, ...(data.value.passwords || {}) },
+        areaIndicators: { ...copiar(seed).programSettings.areaIndicators, ...(data.value.areaIndicators || {}) }
+      };
+      guardar();
+      if(shouldRender) render();
+    }
+  }catch(err){
+    console.error('Error general cargando configuración:', err);
+  }
 }
 
 function inventarioConStock(){
@@ -356,6 +524,7 @@ async function cargarPedidosSupabase(shouldRender = true){
         client: row.client,
         notes: parsed.text || '',
         status: row.status || 'Pendiente almacén',
+        createdBy: row.created_by || '',
         items: parsed.items || []
       };
     });
@@ -632,6 +801,164 @@ async function guardarVentaSupabase(item){
 }
 
 
+function pagosDeFactura(invoiceId){
+  return (state.partialInvoicePayments || []).filter(p => Number(p.invoiceId) === Number(invoiceId));
+}
+
+function abonadoFacturaParcial(item){
+  const pagos = pagosDeFactura(item.id);
+  if(pagos.length){
+    return pagos.reduce((a,b)=>a+Number(b.amount||0),0);
+  }
+  return Number(item.paidAmount || 0);
+}
+
+function estadoFacturaParcial(item){
+  const total = Number(item.totalAmount || 0);
+  const pagado = abonadoFacturaParcial(item);
+  const saldo = Math.max(0, total - pagado);
+  if(saldo <= 0) return 'Liquidada';
+  if(item.dueDate && diasVencido(item.dueDate) > 0) return 'Vencida';
+  if(pagado > 0) return 'Parcial';
+  return 'Pendiente';
+}
+
+function saldoFacturaParcial(item){
+  return Math.max(0, Number(item.totalAmount || 0) - abonadoFacturaParcial(item));
+}
+
+function complementosPendientesFactura(item){
+  return pagosDeFactura(item.id).filter(p => !p.complementIssued).length;
+}
+
+async function cargarPagosParcialesSupabase(shouldRender = true){
+  try{
+    const [invRes, payRes] = await Promise.all([
+      supabaseClient.from('partial_payment_invoices').select('*').order('id', { ascending: false }),
+      supabaseClient.from('partial_invoice_payments').select('*').order('id', { ascending: true })
+    ]);
+
+    if(invRes.error){
+      console.error('Error cargando facturas PPD desde Supabase:', invRes.error);
+      return;
+    }
+    if(payRes.error){
+      console.error('Error cargando abonos PPD desde Supabase:', payRes.error);
+    }
+
+    state.partialPaymentInvoices = (invRes.data || []).map(row => ({
+      id: row.id,
+      invoice: row.invoice || '',
+      client: row.client || '',
+      invoiceDate: row.invoice_date || '',
+      totalAmount: Number(row.total_amount || 0),
+      dueDate: row.due_date || '',
+      nextPaymentDate: row.next_payment_date || '',
+      paymentCondition: row.payment_condition || '',
+      status: row.status || '',
+      notes: row.notes || ''
+    }));
+
+    state.partialInvoicePayments = (payRes.data || []).map(row => ({
+      id: row.id,
+      invoiceId: row.invoice_id,
+      paymentDate: row.payment_date || '',
+      amount: Number(row.amount || 0),
+      method: row.method || '',
+      reference: row.reference || '',
+      complementIssued: !!row.complement_issued,
+      complementDate: row.complement_date || '',
+      notes: row.notes || ''
+    }));
+
+    if(shouldRender && tabNecesitaPagosParciales(session.tab)){
+      renderMain();
+    }
+  }catch(err){
+    console.error('Error general cargando pagos parciales:', err);
+  }
+}
+
+async function guardarFacturaParcialSupabase(item){
+  const payload = {
+    invoice: item.invoice || '',
+    client: item.client || '',
+    invoice_date: item.invoiceDate || hoy(),
+    total_amount: Number(item.totalAmount || 0),
+    due_date: item.dueDate || null,
+    next_payment_date: item.nextPaymentDate || null,
+    payment_condition: item.paymentCondition || null,
+    status: item.status || estadoFacturaParcial(item),
+    notes: item.notes || null,
+    created_by: session.role
+  };
+
+  const { data, error } = await supabaseClient
+    .from('partial_payment_invoices')
+    .insert(payload)
+    .select()
+    .single();
+
+  if(error) throw error;
+  return data;
+}
+
+async function guardarAbonoFacturaParcialSupabase(payment){
+  const payload = {
+    invoice_id: Number(payment.invoiceId),
+    payment_date: payment.paymentDate || hoy(),
+    amount: Number(payment.amount || 0),
+    method: payment.method || null,
+    reference: payment.reference || null,
+    complement_issued: !!payment.complementIssued,
+    complement_date: payment.complementDate || null,
+    notes: payment.notes || null,
+    created_by: session.role
+  };
+
+  const { data, error } = await supabaseClient
+    .from('partial_invoice_payments')
+    .insert(payload)
+    .select()
+    .single();
+
+  if(error) throw error;
+  return data;
+}
+
+async function actualizarFacturaParcialSupabase(id, changes){
+  const payload = {};
+  if(Object.prototype.hasOwnProperty.call(changes, 'invoice')) payload.invoice = changes.invoice || '';
+  if(Object.prototype.hasOwnProperty.call(changes, 'client')) payload.client = changes.client || '';
+  if(Object.prototype.hasOwnProperty.call(changes, 'invoiceDate')) payload.invoice_date = changes.invoiceDate || null;
+  if(Object.prototype.hasOwnProperty.call(changes, 'totalAmount')) payload.total_amount = Number(changes.totalAmount || 0);
+  if(Object.prototype.hasOwnProperty.call(changes, 'dueDate')) payload.due_date = changes.dueDate || null;
+  if(Object.prototype.hasOwnProperty.call(changes, 'nextPaymentDate')) payload.next_payment_date = changes.nextPaymentDate || null;
+  if(Object.prototype.hasOwnProperty.call(changes, 'paymentCondition')) payload.payment_condition = changes.paymentCondition || null;
+  if(Object.prototype.hasOwnProperty.call(changes, 'status')) payload.status = changes.status || '';
+  if(Object.prototype.hasOwnProperty.call(changes, 'notes')) payload.notes = changes.notes || null;
+
+  const { error } = await supabaseClient
+    .from('partial_payment_invoices')
+    .update(payload)
+    .eq('id', id);
+
+  if(error) throw error;
+}
+
+async function actualizarAbonoFacturaParcialSupabase(id, changes){
+  const payload = {};
+  if(Object.prototype.hasOwnProperty.call(changes, 'complementIssued')) payload.complement_issued = !!changes.complementIssued;
+  if(Object.prototype.hasOwnProperty.call(changes, 'complementDate')) payload.complement_date = changes.complementDate || null;
+  if(Object.prototype.hasOwnProperty.call(changes, 'notes')) payload.notes = changes.notes || null;
+  const { error } = await supabaseClient
+    .from('partial_invoice_payments')
+    .update(payload)
+    .eq('id', id);
+  if(error) throw error;
+}
+
+
 function metricas(){
   const inv = inventarioConStock();
   const cerradas = state.sales.filter(x => esCerrada(x.status));
@@ -657,6 +984,78 @@ function metricas(){
   };
 }
 
+
+
+function metricasAdminEmpresa(){
+  const orders = state.orders || [];
+  const collections = state.collections || [];
+  const salesBase = state.sales || [];
+  const parcialidades = state.partialPaymentInvoices || [];
+  const empacados = orders.filter(x => x.status === 'Empacado').length;
+  const abiertas = collections.filter(x => !x.paid);
+  const vencidas = abiertas.filter(x => diasVencido(x.dueDate) > 0);
+  const cerradas = salesBase.filter(x => esCerrada(x.status));
+  const saldoParcialidades = parcialidades.reduce((a,b)=>a+saldoFacturaParcial(b),0);
+  return {
+    porFacturar:{label:'Por facturar',value:String(empacados),sub:'Pedidos empacados que administración debe cerrar',status:empacados>0?'warn':'good'},
+    porCobrar:{label:'Por cobrar',value:dinero(abiertas.reduce((a,b)=>a+Number(b.amount||0),0)),sub:`${abiertas.length} facturas abiertas`,status:abiertas.length>0?'warn':'good'},
+    cobranzaVencida:{label:'Cobranza vencida',value:dinero(vencidas.reduce((a,b)=>a+Number(b.amount||0),0)),sub:`${vencidas.length} facturas vencidas`,status:vencidas.length>0?'bad':'good'},
+    ventasCerradas:{label:'Ventas cerradas',value:dinero(cerradas.reduce((a,b)=>a+Number(b.amount||0),0)),sub:`${cerradas.length} ventas ganadas`,status:'good'},
+    saldoParcialidades:{label:'Pagos parciales',value:dinero(saldoParcialidades),sub:`${parcialidades.length} facturas controladas`,status:saldoParcialidades>0?'warn':'good'}
+  };
+}
+
+function metricasVentas(){
+  const salesBase = state.sales || [];
+  const seller1Closed = salesBase.filter(x => (x.seller || '') === 'Vendedor 1' && esCerrada(x.status));
+  const seller2Closed = salesBase.filter(x => (x.seller || '') === 'Vendedor 2' && esCerrada(x.status));
+  const followups = salesBase.filter(x => x.status === 'Seguimiento').length;
+  return {
+    ventasCerradasV1:{label:'Ventas cerradas V1',value:dinero(seller1Closed.reduce((a,b)=>a+Number(b.amount||0),0)),sub:'Monto cerrado Vendedor 1',status:'good'},
+    ventasCerradasV2:{label:'Ventas cerradas V2',value:dinero(seller2Closed.reduce((a,b)=>a+Number(b.amount||0),0)),sub:'Monto cerrado Vendedor 2',status:'good'},
+    seguimientos:{label:'Seguimientos',value:String(followups),sub:'Oportunidades activas',status:followups>0?'warn':'good'},
+    registros:{label:'Registros',value:String(salesBase.length),sub:'Actividades comerciales',status:'good'}
+  };
+}
+
+
+function metricasVendedor(nombreVendedor){
+  const salesBase = (state.sales || []).filter(x => (x.seller || '') === nombreVendedor);
+  const cerradas = salesBase.filter(x => esCerrada(x.status));
+  const followups = salesBase.filter(x => x.status === 'Seguimiento').length;
+  const conversion = pct(cerradas.length, salesBase.length || 1);
+  return {
+    ventasCerradas:{label:'Ventas cerradas',value:dinero(cerradas.reduce((a,b)=>a+Number(b.amount||0),0)),sub:`Monto cerrado ${nombreVendedor}`,status:'good'},
+    seguimientos:{label:'Seguimientos',value:String(followups),sub:'Oportunidades activas propias',status:followups>0?'warn':'good'},
+    registros:{label:'Registros',value:String(salesBase.length),sub:'Actividades capturadas propias',status:'good'},
+    conversion:{label:'Conversión',value:conversion+'%',sub:`${cerradas.length} ganadas / ${salesBase.length} registros`,status:estado(conversion,35,20)}
+  };
+}
+
+function metricasAlmacen(){
+  const inv = inventarioConStock();
+  const hoyStr = hoy();
+  const entradasHoy = (state.warehouseEntries || []).filter(x => x.date === hoyStr).reduce((a,b)=>a+Number(b.qty||0),0);
+  const salidasHoy = (state.warehouseOutputs || []).filter(x => x.date === hoyStr).reduce((a,b)=>a+Number(b.qty||0),0);
+  const criticos = inv.filter(x=>x.critical).length;
+  return {
+    entradasHoy:{label:'Entradas hoy',value:String(entradasHoy),sub:'Unidades registradas hoy',status:'good'},
+    salidasHoy:{label:'Salidas hoy',value:String(salidasHoy),sub:'Unidades surtidas hoy',status:'good'},
+    productosCriticos:{label:'Productos críticos',value:String(criticos),sub:'En mínimo o menos',status:criticos>0?'warn':'good'},
+    stockTotal:{label:'Stock total',value:String(inv.reduce((a,b)=>a+Number(b.stock||0),0)),sub:'Existencia total del almacén',status:'good'}
+  };
+}
+
+function catalogoIndicadores(){
+  return {
+    director: { label:'Dirección', metrics: metricas() },
+    admin_empresa: { label:'Administración empresa', metrics: metricasAdminEmpresa() },
+    ventas: { label:'Ventas general', metrics: metricasVentas() },
+    ventas1: { label:'Vendedor 1', metrics: metricasVendedor('Vendedor 1') },
+    ventas2: { label:'Vendedor 2', metrics: metricasVendedor('Vendedor 2') },
+    almacen: { label:'Almacén', metrics: metricasAlmacen() }
+  };
+}
 function render(){
   renderRoles();
   renderTabs();
@@ -671,23 +1070,19 @@ function renderRoles(){
   row.querySelectorAll('[data-role]').forEach(btn=>{
     btn.onclick = () => {
       const nextRole = btn.dataset.role;
-      if(nextRole === 'administrador' && session.role !== 'administrador'){
-        const pass = window.prompt('Contraseña de administrador:');
+      const protectedRoles = ['administrador','admin_programa','ventas1','ventas2'];
+      if(protectedRoles.includes(nextRole) && session.role !== nextRole){
+        const promptText = nextRole === 'admin_programa'
+          ? 'Contraseña de administración del programa:'
+          : (nextRole === 'ventas1'
+            ? 'Contraseña de Vendedor 1:'
+            : (nextRole === 'ventas2' ? 'Contraseña de Vendedor 2:' : 'Contraseña de administración de empresa:'));
+        const pass = window.prompt(promptText);
         if(pass === null){
           return;
         }
-        if(String(pass).trim() !== ADMIN_PASSWORD){
+        if(String(pass).trim() !== passwordRol(nextRole)){
           alert('Contraseña incorrecta.');
-          return;
-        }
-      }
-      if(nextRole === 'ventas' && session.role !== 'ventas'){
-        const pass = window.prompt('Contraseña de vendedores:');
-        if(pass === null){
-          return;
-        }
-        if(String(pass).trim() !== SELLER_PASSWORD){
-          alert('Contraseña de vendedores incorrecta.');
           return;
         }
       }
@@ -704,7 +1099,7 @@ function renderTabs(){
   document.getElementById('roleDesc').textContent = role.desc;
   const tabs = document.getElementById('tabs');
   tabs.innerHTML = role.tabs.map(tab =>
-    `<button class="tab-btn ${session.tab===tab?'active':''}" data-tab="${tab}">${tab.charAt(0).toUpperCase()+tab.slice(1)}</button>`
+    `<button class="tab-btn ${session.tab===tab?'active':''}" data-tab="${tab}">${tabLabel(tab)}</button>`
   ).join('');
   tabs.querySelectorAll('[data-tab]').forEach(btn=>{
     btn.onclick = async () => {
@@ -717,6 +1112,9 @@ function renderTabs(){
       }
       if(tabNecesitaVentas(session.tab)){
         await cargarVentasSupabase(false);
+      }
+      if(tabNecesitaPagosParciales(session.tab)){
+        await cargarPagosParcialesSupabase(false);
       }
       renderMain();
       renderTabs();
@@ -745,20 +1143,33 @@ function tabla(cols,rows){
 function renderMain(){
   const main = document.getElementById('main');
 
-  const adminOnlyTabs = ['configurar','inventario','compras'];
-  if(adminOnlyTabs.includes(session.tab) && session.role !== 'administrador'){
+  const empresaOnlyTabs = ['admin_empresa'];
+  const programaOnlyTabs = ['configurar','inventario','compras'];
+  if(empresaOnlyTabs.includes(session.tab) && session.role !== 'administrador'){
     main.innerHTML = `
       <div class="section-title">
         <h2>Acceso restringido</h2>
-        <p>Esta sección solo está disponible para el administrador.</p>
+        <p>Esta sección solo está disponible para <b>Administración empresa</b>.</p>
       </div>
       <div class="note-box">
-        Para entrar a esta sección necesitas cambiar al perfil <b>Administrador</b> y escribir la contraseña correcta.
+        Para entrar necesitas seleccionar el perfil <b>Administración empresa</b> y escribir la contraseña correcta.
+      </div>`;
+    return;
+  }
+  if(programaOnlyTabs.includes(session.tab) && session.role !== 'admin_programa'){
+    main.innerHTML = `
+      <div class="section-title">
+        <h2>Acceso restringido</h2>
+        <p>Esta sección solo está disponible para <b>Admin. programa</b>.</p>
+      </div>
+      <div class="note-box">
+        Para entrar necesitas seleccionar el perfil <b>Admin. programa</b> y escribir la contraseña correcta.
       </div>`;
     return;
   }
 
   if(session.tab === 'dashboard') main.innerHTML = vistaDashboard();
+  if(session.tab === 'admin_empresa') main.innerHTML = vistaAdminEmpresa();
   if(session.tab === 'pedidos') main.innerHTML = vistaPedidos();
   if(session.tab === 'configurar') main.innerHTML = vistaConfigurar();
   if(session.tab === 'inventario') main.innerHTML = vistaInventario();
@@ -769,9 +1180,96 @@ function renderMain(){
   attachEvents();
 }
 
+
+function vistaAdminEmpresa(){
+  const orders = state.orders || [];
+  const salesBase = state.sales || [];
+  const collections = state.collections || [];
+  const parcialidades = state.partialPaymentInvoices || [];
+  const saldoParcialidades = parcialidades.reduce((a,b)=>a+saldoFacturaParcial(b),0);
+  const vencidasParcialidades = parcialidades.filter(x => saldoFacturaParcial(x)>0 && x.dueDate && diasVencido(x.dueDate)>0);
+  const pendientesAlmacen = orders.filter(x => x.status === 'Pendiente almacén').length;
+  const incompletos = orders.filter(x => x.status === 'Incompleto').length;
+  const empacados = orders.filter(x => x.status === 'Empacado').length;
+  const porFacturar = empacados;
+  const abiertas = collections.filter(x => !x.paid);
+  const vencidas = abiertas.filter(x => diasVencido(x.dueDate) > 0);
+  const montoPorCobrar = abiertas.reduce((a,b)=>a+Number(b.amount||0),0);
+  const montoVencido = vencidas.reduce((a,b)=>a+Number(b.amount||0),0);
+  const seguimientos = salesBase.filter(x => x.status === 'Seguimiento').length;
+  const cerradas = salesBase.filter(x => esCerrada(x.status));
+  const montoCerrado = cerradas.reduce((a,b)=>a+Number(b.amount||0),0);
+  const acciones = [
+    {txt:`${porFacturar} pedidos empacados pendientes de facturar`, nivel: porFacturar>0 ? 'warn' : 'good'},
+    {txt:`${vencidas.length} facturas vencidas por cobrar`, nivel: vencidas.length>0 ? 'bad' : 'good'},
+    {txt:`${pendientesAlmacen + incompletos} pedidos requieren seguimiento con almacén`, nivel: (pendientesAlmacen+incompletos)>0 ? 'warn' : 'good'},
+    {txt:`${vencidasParcialidades.length} facturas de pagos parciales vencidas`, nivel: vencidasParcialidades.length>0 ? 'bad' : 'good'},
+    {txt:`${seguimientos} oportunidades comerciales en seguimiento`, nivel: seguimientos>0 ? 'warn' : 'good'}
+  ];
+
+  return `
+    <div class="section-title">
+      <h2>Administración de la empresa</h2>
+      <p>Indicadores operativos para administrar Seyalab: pedidos, ventas, facturación y cobranza. No es configuración del programa.</p>
+    </div>
+
+    <div class="metrics">
+      ${indicadoresVisibles('admin_empresa', Object.keys(metricasAdminEmpresa())).map(id => metricasAdminEmpresa()[id]).filter(Boolean).map(cardMetric).join('')}
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card" style="padding:18px;border:none;box-shadow:none">
+          <h3>Acciones administrativas de esta semana</h3>
+          <p class="sub">Esto es lo que administración debe mover para que el flujo no se atore.</p>
+          <div class="kpi-list">
+            ${acciones.map(a=>`
+              <div class="kpi-row" style="grid-template-columns:1fr auto">
+                <div style="font-weight:800">${a.txt}</div>
+                <span class="badge" style="${a.nivel==='bad'?'background:#fff1f2;color:#9f1239':a.nivel==='warn'?'background:#fffbeb;color:#92400e':'background:#ecfdf5;color:#166534'}">${a.nivel==='good'?'OK':a.nivel==='warn'?'Revisar':'Urgente'}</span>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card" style="padding:18px;border:none;box-shadow:none">
+          <h3>Separación correcta</h3>
+          <p class="sub">Para evitar confundir responsabilidades</p>
+          <div class="note-box">
+            <b>Administración de empresa:</b> operación real de Seyalab, pedidos, facturación, ventas y cobranza.<br><br>
+            <b>Administración del programa:</b> ajustes internos, indicadores visibles, notas del dashboard y configuración del sistema.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div>
+        <div class="table-title">Pedidos que administración debe revisar</div>
+        ${tabla([
+          {key:'folio',label:'Folio'},
+          {key:'client',label:'Cliente'},
+          {key:'date',label:'Fecha'},
+          {key:'status',label:'Estatus'}
+        ], orders.filter(x => ['Empacado','Pendiente almacén','Incompleto','Listo para surtir'].includes(x.status)).slice(0,12))}
+      </div>
+      <div>
+        <div class="table-title">Cobranza abierta</div>
+        ${tabla([
+          {key:'invoice',label:'Factura'},
+          {key:'client',label:'Cliente'},
+          {key:'amount',label:'Monto',render:v=>dinero(v)},
+          {key:'dueDate',label:'Vence'},
+          {key:'status',label:'Estatus'}
+        ], abiertas.slice(0,12))}
+      </div>
+    </div>`;
+}
+
 function vistaDashboard(){
   const m = metricas();
-  const visibles = (state.dashboard.visible || []).map(id => m[id]).filter(Boolean);
+  const visibles = indicadoresVisibles('director', state.dashboard.visible || []).map(id => m[id]).filter(Boolean);
   const notes = state.dashboard.notes || [];
   const inv = inventarioConStock();
 
@@ -857,10 +1355,13 @@ function vistaPedidos(){
   const inv = inventarioConStock();
   const draft = state.orderDraft || { date:hoy(), client:'', notes:'', items:[] };
   const orders = state.orders || [];
-  const pendientes = orders.filter(x => x.status === 'Pendiente almacén').length;
-  const listos = orders.filter(x => x.status === 'Listo para surtir').length;
+  const ordersVisible = esRolVendedor()
+    ? orders.filter(x => x.createdBy === session.role || x.createdBy === vendedorDeRol() || (!x.createdBy && false))
+    : orders;
+  const pendientes = ordersVisible.filter(x => x.status === 'Pendiente almacén').length;
+  const listos = ordersVisible.filter(x => x.status === 'Listo para surtir').length;
   const empacados = orders.filter(x => x.status === 'Empacado').length;
-  const facturados = orders.filter(x => x.status === 'Facturado').length;
+  const facturados = ordersVisible.filter(x => x.status === 'Facturado').length;
 
   return `
     <div class="section-title">
@@ -883,7 +1384,7 @@ function vistaPedidos(){
         <div class="card" style="padding:18px;border:none;box-shadow:none">
           <h3>Nuevo pedido</h3>
           <p class="sub">Administración o vendedores capturan el pedido y lo mandan al almacén. Puedes usar <b>Agregar partida</b> para varias líneas o guardar directo si solo será una.</p>
-          ${['administrador','ventas'].includes(session.role) ? `
+          ${(['administrador'].includes(session.role) || esRolVendedor()) ? `
           <form id="orderDraftForm" class="form">
             <div class="field"><label>Fecha</label><input type="date" name="date" value="${draft.date || hoy()}"></div>
             <div class="field"><label>Cliente</label><input name="client" value="${draft.client || ''}"></div>
@@ -892,7 +1393,7 @@ function vistaPedidos(){
               <label>Producto</label>
               <select name="productId" id="draftProductId">
                 <option value="">Selecciona un producto</option>
-                ${inv.map(x => `<option value="${x.id}">${x.product}${session.role === 'ventas' ? '' : ' · stock ' + x.stock}</option>`).join('')}
+                ${inv.map(x => `<option value="${x.id}">${x.product}${esRolVendedor() ? '' : ' · stock ' + x.stock}</option>`).join('')}
               </select>
             </div>
             <div class="field"><label>Cantidad solicitada</label><input type="number" name="qty" id="draftQty"></div>
@@ -910,10 +1411,10 @@ function vistaPedidos(){
                 <div class="kpi-row" style="grid-template-columns:1fr auto auto">
                   <div>
                     <div style="font-weight:800">${it.product}</div>
-                    <div style="margin-top:4px;color:#64748b;font-size:13px">Solicitado: ${it.qty}${session.role === 'ventas' ? '' : ' · Disponible: ' + stockDisponible(it.productId)}</div>
+                    <div style="margin-top:4px;color:#64748b;font-size:13px">Solicitado: ${it.qty}${esRolVendedor() ? '' : ' · Disponible: ' + stockDisponible(it.productId)}</div>
                   </div>
-                  ${session.role === 'ventas' ? '<span class="badge">Pedido</span>' : `<span class="badge">${stockDisponible(it.productId) >= Number(it.qty) ? 'OK' : 'Faltante'}</span>`}
-                  ${['administrador','ventas'].includes(session.role) ? `<button class="danger-btn" data-del-draft-item="${idx}">Quitar</button>` : ''}
+                  ${esRolVendedor() ? '<span class="badge">Pedido</span>' : `<span class="badge">${stockDisponible(it.productId) >= Number(it.qty) ? 'OK' : 'Faltante'}</span>`}
+                  ${(['administrador'].includes(session.role) || esRolVendedor()) ? `<button class="danger-btn" data-del-draft-item="${idx}">Quitar</button>` : ''}
                 </div>
               `).join('')}
             </div>` : `<div class="note-box">Todavía no hay partidas en el pedido.</div>`}
@@ -936,16 +1437,16 @@ function vistaPedidos(){
     </div>
 
     <div class="note-box">
-      <b>Pedidos guardados actualmente:</b> ${orders.length}
+      <b>Pedidos guardados actualmente:</b> ${ordersVisible.length}
     </div>
     <div class="table-title">Pedidos registrados</div>
     <div class="kpi-list">
-      ${orders.length ? orders.map(order => `
+      ${ordersVisible.length ? ordersVisible.map(order => `
         <div class="card" style="padding:16px">
           <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
             <div>
               <div style="font-size:18px;font-weight:800">${order.folio} · ${order.client}</div>
-              <div style="margin-top:6px;color:#64748b;font-size:13px">Fecha: ${order.date} · Estatus: <b>${order.status}</b></div>
+              <div style="margin-top:6px;color:#64748b;font-size:13px">Fecha: ${order.date} · Estatus: <b>${order.status}</b>${order.createdBy ? ' · Capturó: ' + (order.createdBy === 'ventas1' ? 'Vendedor 1' : order.createdBy === 'ventas2' ? 'Vendedor 2' : order.createdBy) : ''}</div>
               <div style="margin-top:6px;color:#64748b;font-size:13px">${order.notes || 'Sin observaciones'}</div>
             </div>
             <div class="actions-row">
@@ -961,7 +1462,7 @@ function vistaPedidos(){
               <thead>
                 <tr>
                   <th>Producto</th><th>Solicitado</th>
-                  ${session.role === 'ventas' ? '<th>Estatus</th>' : '<th>Disponible</th><th>Resultado</th>'}
+                  ${esRolVendedor() ? '<th>Estatus</th>' : '<th>Disponible</th><th>Resultado</th>'}
                 </tr>
               </thead>
               <tbody>
@@ -969,7 +1470,7 @@ function vistaPedidos(){
                   <tr>
                     <td>${it.product}</td>
                     <td>${it.qty}</td>
-                    ${session.role === 'ventas'
+                    ${esRolVendedor()
                       ? `<td><span class="badge">${order.status}</span></td>`
                       : `<td>${stockDisponible(it.productId)}</td><td>${stockDisponible(it.productId) >= Number(it.qty) ? '<span class="badge" style="background:#ecfdf5;color:#166534">Hay</span>' : '<span class="badge" style="background:#fff7ed;color:#c2410c">No hay completo</span>'}</td>`}
                   </tr>
@@ -978,45 +1479,43 @@ function vistaPedidos(){
             </table>
           </div>
         </div>
-      `).join('') : `<div class="note-box">Todavía no hay pedidos registrados.</div>`}
+      `).join('') : `<div class="note-box">Todavía no hay pedidos registrados para este perfil.</div>`}
     </div>
   `;
 }
 
 
+
 function vistaConfigurar(){
-  const m = metricas();
-  const visible = state.dashboard.visible || [];
+  const settings = programSettings();
   const notes = state.dashboard.notes || [];
+  const catalog = catalogoIndicadores();
   return `
     <div class="section-title">
-      <h2>Configurar dashboard</h2>
-      <p>Simple: marca qué KPI quieres ver y agrega notas rápidas.</p>
+      <h2>Administración del programa</h2>
+      <p>Ajustes internos del sistema: contraseñas, indicadores por área, notas del dashboard e inventario maestro.</p>
     </div>
 
     <div class="grid-2">
       <div class="card">
         <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Indicadores visibles</h3>
-          <p class="sub">Activa o quita KPI para el director</p>
-          <div class="kpi-list">
-            ${Object.entries(m).map(([id,item])=>`
-              <label class="kpi-row">
-                <div>
-                  <div style="font-weight:800">${item.label}</div>
-                  <div style="margin-top:4px;color:#64748b;font-size:13px">${item.sub}</div>
-                </div>
-                <input type="checkbox" data-kpi="${id}" ${visible.includes(id)?'checked':''}>
-                <button class="ghost-btn" data-remove-kpi="${id}">Quitar</button>
-              </label>`).join('')}
-          </div>
+          <h3>Cambio de contraseñas</h3>
+          <p class="sub">Estas claves controlan el acceso por perfil. Al guardarlas se intenta sincronizar con Supabase para que apliquen en otros equipos.</p>
+          <form id="passwordForm" class="form">
+            <div class="field"><label>Administración empresa</label><input name="administrador" value="${settings.passwords.administrador || ''}"></div>
+            <div class="field"><label>Admin. programa</label><input name="admin_programa" value="${settings.passwords.admin_programa || ''}"></div>
+            <div class="field"><label>Contraseña Vendedor 1</label><input name="ventas1" value="${settings.passwords.ventas1 || ''}"></div>
+            <div class="field"><label>Contraseña Vendedor 2</label><input name="ventas2" value="${settings.passwords.ventas2 || ''}"></div>
+            <button class="save-btn" type="submit">Guardar contraseñas</button>
+          </form>
+          <div class="note-box">Recomendación: usa claves diferentes para <b>Administración empresa</b>, <b>Admin. programa</b>, <b>Vendedor 1</b> y <b>Vendedor 2</b>.</div>
         </div>
       </div>
 
       <div class="card">
         <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Nota rápida para dashboard</h3>
-          <p class="sub">Texto libre para dirección</p>
+          <h3>Nota rápida para el dashboard</h3>
+          <p class="sub">Mensaje interno que aparecerá en el resumen directivo.</p>
           <form id="noteForm" class="form">
             <div class="field"><label>Título</label><input name="title" placeholder="Ej. Prioridad de la semana"></div>
             <div class="field"><label>Texto</label><textarea name="text" placeholder="Ej. Revisar exactitud del inventario y cobranza vencida."></textarea></div>
@@ -1036,6 +1535,30 @@ function vistaConfigurar(){
           </div>
         </div>
       </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card" style="padding:18px;border:none;box-shadow:none">
+        <h3>Indicadores por área</h3>
+        <p class="sub">Activa o quita los indicadores que verá cada perfil. Esto permite que cada área tenga solo sus números importantes.</p>
+        <div class="grid-2">
+          ${Object.entries(catalog).map(([area, cfg])=>`
+            <div class="card" style="padding:16px;box-shadow:none">
+              <h3 style="font-size:18px">${cfg.label}</h3>
+              <p class="sub">Indicadores visibles para esta área</p>
+              <div class="kpi-list">
+                ${Object.entries(cfg.metrics).map(([id,item])=>`
+                  <label class="kpi-row" style="grid-template-columns:1fr auto">
+                    <div>
+                      <div style="font-weight:800">${item.label}</div>
+                      <div style="margin-top:4px;color:#64748b;font-size:13px">${item.sub}</div>
+                    </div>
+                    <input type="checkbox" data-area-kpi="${area}" data-kpi-id="${id}" ${(settings.areaIndicators[area] || []).includes(id)?'checked':''}>
+                  </label>`).join('')}
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>
     </div>`;
 }
 
@@ -1050,7 +1573,7 @@ function vistaInventario(){
     String(x.location || '').toLowerCase().includes(q) ||
     String(x.provider || '').toLowerCase().includes(q)
   ) : inv;
-  const canManageInventory = session.role === 'administrador';
+  const canManageInventory = session.role === 'admin_programa';
 
   const deleteColumn = canManageInventory
     ? [{key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="inventory" data-id="${row.id}">Borrar</button>`}]
@@ -1102,7 +1625,7 @@ function vistaInventario(){
       <div class="card">
         <div class="card" style="padding:18px;border:none;box-shadow:none">
           <h3>Inventario protegido</h3>
-          <p class="sub">Solo el administrador puede editar el inventario maestro</p>
+          <p class="sub">Solo Admin. programa puede editar el inventario maestro</p>
           <div class="note-box">
             Este perfil no puede dar de alta, importar ni borrar productos del inventario.
             El stock solamente cambia por <b>entradas</b> y <b>salidas</b> registradas en el sistema.
@@ -1114,7 +1637,7 @@ function vistaInventario(){
           <h3>Consulta de inventario</h3>
           <p class="sub">Puedes buscar y revisar existencias, pero no modificar el catálogo.</p>
           <div class="note-box">
-            Para cambios directos al inventario maestro entra con el perfil <b>Administrador</b>.
+            Para cambios directos al inventario maestro entra con el perfil <b>Admin. programa</b>.
           </div>
         </div>
       </div>`;
@@ -1308,6 +1831,10 @@ function vistaAlmacen(){
       <p>Captura rápida y tablas claras. Ahora las entradas y salidas se ligan directo al inventario.</p>
     </div>
 
+    <div class="metrics">
+      ${indicadoresVisibles('almacen', Object.keys(metricasAlmacen())).map(id => metricasAlmacen()[id]).filter(Boolean).map(cardMetric).join('')}
+    </div>
+
     <div class="grid-3">
       <div class="card">
         <div class="card" style="padding:18px;border:none;box-shadow:none">
@@ -1405,15 +1932,17 @@ function vistaAlmacen(){
 }
 
 function vistaVentas(){
-  const salesBase = state.sales || [];
-  const seller1Closed = salesBase.filter(x => (x.seller || '') === 'Vendedor 1' && esCerrada(x.status));
-  const seller2Closed = salesBase.filter(x => (x.seller || '') === 'Vendedor 2' && esCerrada(x.status));
-  const followups = salesBase.filter(x => x.status === 'Seguimiento').length;
+  const sellerName = vendedorDeRol();
+  const isSeller = !!sellerName;
+  const salesAll = state.sales || [];
+  const salesBase = isSeller ? salesAll.filter(x => (x.seller || '') === sellerName) : salesAll;
+  const metricasPagina = isSeller ? metricasVendedor(sellerName) : metricasVentas();
+  const areaKey = areaVentasActual();
 
   return `
     <div class="section-title">
-      <h2>Ventas</h2>
-      <p>Registro comercial compartido. Lo que capture ventas impacta en el dashboard del director.</p>
+      <h2>${isSeller ? 'Ventas / indicadores · ' + sellerName : 'Ventas'}</h2>
+      <p>${isSeller ? 'Este perfil solo captura y consulta sus propios indicadores comerciales.' : 'Registro comercial compartido. Lo que capture ventas impacta en el dashboard del director.'}</p>
     </div>
 
     <div class="note-box">
@@ -1425,10 +1954,7 @@ function vistaVentas(){
     </div>
 
     <div class="metrics">
-      ${cardMetric({label:'Ventas cerradas V1',value:dinero(seller1Closed.reduce((a,b)=>a+Number(b.amount||0),0)),sub:'Monto cerrado Vendedor 1',status:'good'})}
-      ${cardMetric({label:'Ventas cerradas V2',value:dinero(seller2Closed.reduce((a,b)=>a+Number(b.amount||0),0)),sub:'Monto cerrado Vendedor 2',status:'good'})}
-      ${cardMetric({label:'Seguimientos',value:String(followups),sub:'Oportunidades activas',status:followups>0?'warn':'good'})}
-      ${cardMetric({label:'Registros',value:String(salesBase.length),sub:'Actividades comerciales',status:'good'})}
+      ${indicadoresVisibles(areaKey, Object.keys(metricasPagina)).map(id => metricasPagina[id]).filter(Boolean).map(cardMetric).join('')}
     </div>
 
     <div class="grid-2">
@@ -1438,7 +1964,11 @@ function vistaVentas(){
           <form id="salesForm" class="form">
             <div class="field"><label>Fecha</label><input type="date" name="date" value="${hoy()}"></div>
             <div class="field"><label>Cliente</label><input name="client"></div>
-            <div class="field"><label>Vendedor</label><select name="seller"><option>Vendedor 1</option><option>Vendedor 2</option></select></div>
+            ${isSeller ? `
+              <div class="field"><label>Vendedor</label><input value="${sellerName}" disabled><input type="hidden" name="seller" value="${sellerName}"></div>
+            ` : `
+              <div class="field"><label>Vendedor</label><select name="seller"><option>Vendedor 1</option><option>Vendedor 2</option></select></div>
+            `}
             <div class="field"><label>Contacto</label><input name="contact" placeholder="Ej. Compras / Dirección"></div>
             <div class="field"><label>Tipo</label><select name="type"><option>Cotización</option><option>Seguimiento</option><option>Venta</option><option>Visita</option></select></div>
             <div class="field"><label>Monto</label><input type="number" name="amount"></div>
@@ -1452,7 +1982,7 @@ function vistaVentas(){
         </div>
       </div>
       <div>
-        <div class="table-title">Actividades</div>
+        <div class="table-title">${isSeller ? 'Mis actividades' : 'Actividades'}</div>
         ${tabla([
           {key:'date',label:'Fecha'},
           {key:'client',label:'Cliente'},
@@ -1467,17 +1997,32 @@ function vistaVentas(){
     </div>`;
 }
 
+
 function vistaCobranza(){
+  const cols = state.collections || [];
+  const abiertas = cols.filter(x => !x.paid);
+  const vencidas = abiertas.filter(x => x.dueDate && diasVencido(x.dueDate) > 0);
+  const montoAbierto = abiertas.reduce((a,b)=>a+Number(b.amount||0),0);
+  const montoVencido = vencidas.reduce((a,b)=>a+Number(b.amount||0),0);
+
   return `
     <div class="section-title">
       <h2>Cobranza</h2>
-      <p>Registro rápido de facturas y seguimiento.</p>
+      <p>Una sola área para controlar facturas normales, facturas PPD, abonos, saldos y complementos.</p>
+    </div>
+
+    <div class="metrics">
+      ${cardMetric({label:'Facturas abiertas',value:String(abiertas.length),sub:`Saldo general: ${dinero(montoAbierto)}`,status:abiertas.length>0?'warn':'good'})}
+      ${cardMetric({label:'Vencidas',value:String(vencidas.length),sub:`Vencido: ${dinero(montoVencido)}`,status:vencidas.length>0?'bad':'good'})}
+      ${cardMetric({label:'Facturas registradas',value:String(cols.length),sub:'Cobranza general',status:'good'})}
+      ${cardMetric({label:'Pagos parciales',value:String((state.partialPaymentInvoices||[]).length),sub:'Facturas PPD controladas aquí',status:(state.partialPaymentInvoices||[]).length>0?'warn':'good'})}
     </div>
 
     <div class="grid-2">
       <div class="card">
         <div class="card" style="padding:18px;border:none;box-shadow:none">
-          <h3>Nueva factura</h3>
+          <h3>Nueva factura de cobranza general</h3>
+          <p class="sub">Para facturas simples: pendiente, pagada o parcial.</p>
           <form id="colForm" class="form">
             <div class="field"><label>Factura</label><input name="invoice"></div>
             <div class="field"><label>Cliente</label><input name="client"></div>
@@ -1491,7 +2036,7 @@ function vistaCobranza(){
         </div>
       </div>
       <div>
-        <div class="table-title">Facturas</div>
+        <div class="table-title">Cobranza general</div>
         ${tabla([
           {key:'invoice',label:'Factura'},
           {key:'client',label:'Cliente'},
@@ -1501,7 +2046,124 @@ function vistaCobranza(){
           {key:'id',label:'Borrar',render:(v,row)=>`<button class="danger-btn" data-del="collection" data-id="${row.id}">Borrar</button>`}
         ], state.collections)}
       </div>
-    </div>`;
+    </div>
+
+    ${bloquePagosParciales()}
+  `;
+}
+
+
+
+function bloquePagosParciales(){
+  const list = state.partialPaymentInvoices || [];
+  const abiertas = list.filter(x => saldoFacturaParcial(x) > 0);
+  const vencidas = abiertas.filter(x => x.dueDate && diasVencido(x.dueDate) > 0);
+  const total = list.reduce((a,b)=>a+Number(b.totalAmount||0),0);
+  const abonado = list.reduce((a,b)=>a+abonadoFacturaParcial(b),0);
+  const saldo = list.reduce((a,b)=>a+saldoFacturaParcial(b),0);
+  const complementosPendientes = (state.partialInvoicePayments || []).filter(x => !x.complementIssued).length;
+
+  const rows = list.map(x => ({
+    ...x,
+    paidAmount: abonadoFacturaParcial(x),
+    balance: saldoFacturaParcial(x),
+    statusCalc: estadoFacturaParcial(x),
+    complementsPending: complementosPendientesFactura(x)
+  }));
+
+  return `
+    <div class="section-title" style="margin-top:28px">
+      <h2>Facturas PPD / pagos parciales</h2>
+      <p>Subárea de cobranza para facturas que se pagan por abonos: total, historial de pagos, saldo y complementos pendientes.</p>
+    </div>
+
+    <div class="metrics">
+      ${cardMetric({label:'Total facturado PPD',value:dinero(total),sub:`${list.length} facturas registradas`,status:'good'})}
+      ${cardMetric({label:'Total abonado',value:dinero(abonado),sub:'Pagos recibidos sobre parcialidades',status:'good'})}
+      ${cardMetric({label:'Saldo pendiente',value:dinero(saldo),sub:'Dinero todavía por cobrar',status:saldo>0?'warn':'good'})}
+      ${cardMetric({label:'Complementos pendientes',value:String(complementosPendientes),sub:'Pagos sin marcar complemento',status:complementosPendientes>0?'warn':'good'})}
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card" style="padding:18px;border:none;box-shadow:none">
+          <h3>Nueva factura PPD</h3>
+          <p class="sub">Captura la factura cuando el cliente no la pagará completa de una sola vez.</p>
+          <form id="partialInvoiceForm" class="form">
+            <div class="field"><label>Fecha de factura</label><input type="date" name="invoiceDate" value="${hoy()}"></div>
+            <div class="field"><label>Factura</label><input name="invoice" placeholder="Ej. FAC-123"></div>
+            <div class="field"><label>Cliente</label><input name="client" placeholder="Ej. Laboratorio X"></div>
+            <div class="field"><label>Monto total</label><input type="number" name="totalAmount" step="any"></div>
+            <div class="field"><label>Vence</label><input type="date" name="dueDate" value="${hoy()}"></div>
+            <div class="field"><label>Condición de pago</label><select name="paymentCondition"><option>2 pagos</option><option>3 pagos</option><option>Mensual</option><option>Libre</option></select></div>
+            <div class="field"><label>Próximo pago esperado</label><input type="date" name="nextPaymentDate" value="${hoy()}"></div>
+            <div class="field"><label>Notas</label><textarea name="notes" placeholder="Ej. Se acordó pagar en 3 partes"></textarea></div>
+            <button class="save-btn" type="submit">Guardar factura PPD</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card" style="padding:18px;border:none;box-shadow:none">
+          <h3>Próximos focos</h3>
+          <p class="sub">Lo que administración debe cuidar</p>
+          <div class="note-box">
+            <b>Facturas vencidas:</b> ${vencidas.length}<br><br>
+            <b>Saldo vencido:</b> ${dinero(vencidas.reduce((a,b)=>a+saldoFacturaParcial(b),0))}<br><br>
+            <b>Complementos pendientes:</b> ${complementosPendientes}<br><br>
+            <b>Regla:</b> cada abono debe quedar registrado y marcado cuando su complemento ya se emitió.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-title">Facturas PPD registradas</div>
+    ${tabla([
+      {key:'invoice',label:'Factura'},
+      {key:'client',label:'Cliente'},
+      {key:'totalAmount',label:'Total',render:v=>dinero(v)},
+      {key:'paidAmount',label:'Abonado',render:v=>dinero(v)},
+      {key:'balance',label:'Saldo',render:v=>dinero(v)},
+      {key:'dueDate',label:'Vence'},
+      {key:'nextPaymentDate',label:'Próx. pago'},
+      {key:'complementsPending',label:'Comp. pend.'},
+      {key:'statusCalc',label:'Estado',render:v=>`<span class="badge" style="${v==='Liquidada'?'background:#ecfdf5;color:#166534':v==='Vencida'?'background:#fff1f2;color:#9f1239':v==='Parcial'?'background:#fffbeb;color:#92400e':'background:#eef2ff;color:#1d4ed8'}">${v}</span>`},
+      {key:'id',label:'Acciones',render:(v,row)=>`
+        <button class="ghost-btn" data-add-partial-payment="${row.id}">Registrar abono</button>
+        <button class="save-btn" data-toggle-payment-history="${row.id}">Ver pagos</button>
+        <button class="danger-btn" data-del="partial_invoice" data-id="${row.id}">Borrar</button>
+      `}
+    ], rows)}
+
+    <div class="table-title">Historial de abonos</div>
+    <div class="kpi-list">
+      ${list.length ? list.map(inv=>{
+        const pagos = pagosDeFactura(inv.id);
+        return `
+          <div class="card" style="padding:16px">
+            <div style="font-weight:800;font-size:17px">${inv.invoice} · ${inv.client}</div>
+            <div style="margin-top:6px;color:#64748b;font-size:13px">Total ${dinero(inv.totalAmount)} · Abonado ${dinero(abonadoFacturaParcial(inv))} · Saldo ${dinero(saldoFacturaParcial(inv))}</div>
+            ${pagos.length ? `
+              <div class="table-wrap" style="margin-top:10px">
+                <table>
+                  <thead><tr><th>Fecha</th><th>Monto</th><th>Forma</th><th>Referencia</th><th>Complemento</th><th>Acción</th></tr></thead>
+                  <tbody>
+                    ${pagos.map(p=>`
+                      <tr>
+                        <td>${p.paymentDate}</td>
+                        <td>${dinero(p.amount)}</td>
+                        <td>${p.method || ''}</td>
+                        <td>${p.reference || ''}</td>
+                        <td>${p.complementIssued ? 'Emitido' : 'Pendiente'}</td>
+                        <td>${p.complementIssued ? '' : `<button class="save-btn" data-mark-complement="${p.id}">Marcar complemento</button>`}</td>
+                      </tr>`).join('')}
+                  </tbody>
+                </table>
+              </div>` : `<div class="note-box">Sin abonos registrados todavía.</div>`}
+          </div>`;
+      }).join('') : `<div class="note-box">Todavía no hay facturas PPD.</div>`}
+    </div>
+  `;
 }
 
 function descargarPlantillaCSV(){
@@ -1523,11 +2185,13 @@ function attachEvents(){
 
   const refreshOrdersBtn = main.querySelector('#refreshOrdersBtn');
   if(refreshOrdersBtn) refreshOrdersBtn.onclick = async ()=>{
+    if(!confirmarRefrescoSiHayCaptura()) return;
     await cargarPedidosSupabase();
   };
 
   const refreshInventoryBtn = main.querySelector('#refreshInventoryBtn');
   if(refreshInventoryBtn) refreshInventoryBtn.onclick = async ()=>{
+    if(!confirmarRefrescoSiHayCaptura()) return;
     await cargarAlmacenSupabase();
   };
 
@@ -1570,6 +2234,37 @@ function attachEvents(){
       guardar(); renderMain();
     };
   });
+  const passwordForm = main.querySelector('#passwordForm');
+  if(passwordForm) passwordForm.onsubmit = async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(passwordForm);
+    const settings = programSettings();
+    settings.passwords.administrador = String(fd.get('administrador') || '').trim();
+    settings.passwords.admin_programa = String(fd.get('admin_programa') || '').trim();
+    settings.passwords.ventas1 = String(fd.get('ventas1') || '').trim();
+    settings.passwords.ventas2 = String(fd.get('ventas2') || '').trim();
+    await guardarConfiguracionProgramaSupabase();
+    alert('Contraseñas guardadas.');
+    renderMain();
+  };
+
+  main.querySelectorAll('[data-area-kpi]').forEach(chk=>{
+    chk.onchange = async ()=>{
+      const area = chk.dataset.areaKpi;
+      const id = chk.dataset.kpiId;
+      const settings = programSettings();
+      settings.areaIndicators[area] = settings.areaIndicators[area] || [];
+      let arr = settings.areaIndicators[area];
+      if(chk.checked){
+        if(!arr.includes(id)) arr.push(id);
+      }else{
+        arr = arr.filter(x => x !== id);
+      }
+      settings.areaIndicators[area] = arr;
+      await guardarConfiguracionProgramaSupabase();
+      renderMain();
+    };
+  });
 
   const inventorySearch = main.querySelector('#inventorySearch');
   if(inventorySearch) inventorySearch.oninput = (e)=>{
@@ -1592,8 +2287,8 @@ function attachEvents(){
   if(inventoryForm) inventoryForm.onsubmit = async (e)=>{
     e.preventDefault();
     detenerAutoSync();
-    if(session.role !== 'administrador'){
-      alert('Solo el administrador puede dar de alta productos en inventario.');
+    if(session.role !== 'admin_programa'){
+      alert('Solo Admin. programa puede dar de alta productos en inventario.');
       return;
     }
     try{
@@ -1627,8 +2322,8 @@ function attachEvents(){
   if(importForm) importForm.onsubmit = (e)=>{
     e.preventDefault();
     detenerAutoSync();
-    if(session.role !== 'administrador'){
-      alert('Solo el administrador puede importar inventario.');
+    if(session.role !== 'admin_programa'){
+      alert('Solo Admin. programa puede importar inventario.');
       return;
     }
     const fileInput = document.getElementById('inventoryFile');
@@ -1855,7 +2550,7 @@ function attachEvents(){
 
   const addOrderItemBtn = main.querySelector('#addOrderItemBtn');
   if(addOrderItemBtn) addOrderItemBtn.onclick = ()=>{
-    if(!['administrador','ventas'].includes(session.role)){
+    if(!(session.role === 'administrador' || esRolVendedor())){
       alert('Solo administración o vendedores pueden capturar pedidos.');
       return;
     }
@@ -1882,7 +2577,7 @@ function attachEvents(){
   const orderDraftForm = main.querySelector('#orderDraftForm');
   if(orderDraftForm) orderDraftForm.onsubmit = async (e)=>{
     e.preventDefault();
-    if(!['administrador','ventas'].includes(session.role)){
+    if(!(session.role === 'administrador' || esRolVendedor())){
       alert('Solo administración o vendedores pueden guardar pedidos.');
       return;
     }
@@ -2173,7 +2868,7 @@ function attachEvents(){
       await guardarVentaSupabase({
         date: fd.get('date'),
         client: fd.get('client'),
-        seller: fd.get('seller') || 'Vendedor 1',
+        seller: esRolVendedor() ? vendedorDeRol() : (fd.get('seller') || 'Vendedor 1'),
         contact: fd.get('contact'),
         type: fd.get('type'),
         amount: Number(fd.get('amount')||0),
@@ -2212,13 +2907,97 @@ function attachEvents(){
     guardar(); renderMain();
   };
 
+
+  const partialInvoiceForm = main.querySelector('#partialInvoiceForm');
+  if(partialInvoiceForm) partialInvoiceForm.onsubmit = async (e)=>{
+    e.preventDefault();
+    detenerAutoSync();
+    try{
+      const fd = new FormData(partialInvoiceForm);
+      const item = {
+        invoiceDate: fd.get('invoiceDate'),
+        invoice: fd.get('invoice'),
+        client: fd.get('client'),
+        totalAmount: Number(fd.get('totalAmount')||0),
+        dueDate: fd.get('dueDate'),
+        nextPaymentDate: fd.get('nextPaymentDate'),
+        paymentCondition: fd.get('paymentCondition'),
+        notes: fd.get('notes')
+      };
+      item.status = estadoFacturaParcial(item);
+      await guardarFacturaParcialSupabase(item);
+      await cargarPagosParcialesSupabase(false);
+      guardar();
+      renderMain();
+      alert('Factura PPD guardada.');
+    }catch(err){
+      console.error(err);
+      alert('No se pudo guardar la factura PPD. Revisa que hayas corrido el SQL nuevo en Supabase.');
+    }finally{
+      iniciarAutoSync();
+    }
+  };
+
+  main.querySelectorAll('[data-add-partial-payment]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = Number(btn.dataset.addPartialPayment);
+      const item = (state.partialPaymentInvoices || []).find(x => Number(x.id) === id);
+      if(!item) return;
+      const txt = window.prompt(`Monto del abono recibido para ${item.invoice}:`);
+      if(txt === null) return;
+      const amount = Number(String(txt).replaceAll(',',''));
+      if(!amount || amount <= 0){
+        alert('Captura un monto válido.');
+        return;
+      }
+      const method = window.prompt('Forma de pago: efectivo, transferencia, tarjeta, etc.', 'Transferencia') || '';
+      const reference = window.prompt('Referencia del pago:', '') || '';
+      const complement = window.confirm('¿El complemento de pago ya fue emitido?');
+      try{
+        await guardarAbonoFacturaParcialSupabase({
+          invoiceId:id,
+          paymentDate:hoy(),
+          amount,
+          method,
+          reference,
+          complementIssued: complement,
+          complementDate: complement ? hoy() : '',
+          notes:''
+        });
+        const newStatus = estadoFacturaParcial(item);
+        await actualizarFacturaParcialSupabase(id, {status:newStatus});
+        await cargarPagosParcialesSupabase(false);
+        guardar();
+        renderMain();
+      }catch(err){
+        console.error(err);
+        alert('No se pudo registrar el abono.');
+      }
+    };
+  });
+
+  main.querySelectorAll('[data-mark-complement]').forEach(btn=>{
+    btn.onclick = async ()=>{
+      const id = Number(btn.dataset.markComplement);
+      try{
+        await actualizarAbonoFacturaParcialSupabase(id, {complementIssued:true, complementDate:hoy()});
+        await cargarPagosParcialesSupabase(false);
+        guardar();
+        renderMain();
+      }catch(err){
+        console.error(err);
+        alert('No se pudo marcar el complemento.');
+      }
+    };
+  });
+
   main.querySelectorAll('[data-del]').forEach(btn=>{
     btn.onclick = async ()=>{
       const id = Number(btn.dataset.id);
       const type = btn.dataset.del;
       try{
         if(type==='inventory'){
-          if(session.role !== 'administrador'){
+          if(session.role !== 'admin_programa'){
             alert('Solo el administrador puede borrar productos del inventario.');
             return;
           }
@@ -2237,6 +3016,10 @@ function attachEvents(){
           await cargarVentasSupabase(false);
         } else if(type==='collection'){
           state.collections = state.collections.filter(x=>x.id!==id);
+        } else if(type==='partial_invoice'){
+          try{ await supabaseClient.from('partial_invoice_payments').delete().eq('invoice_id', id); }catch(e){}
+          await borrarRegistroSupabase('partial_payment_invoices', id);
+          await cargarPagosParcialesSupabase(false);
         }
         guardar();
         renderMain();
@@ -2246,11 +3029,13 @@ function attachEvents(){
       }
     };
   });
+  activarProteccionFormularios();
 }
 
-Promise.all([cargarPedidosSupabase(false), cargarAlmacenSupabase(false), cargarVentasSupabase(false)]).finally(() => {
+Promise.all([cargarConfiguracionPrograma(false), cargarPedidosSupabase(false), cargarAlmacenSupabase(false), cargarVentasSupabase(false), cargarPagosParcialesSupabase(false)]).finally(() => {
   render();
 });
 </script>
 </body>
 </html>
+
